@@ -140,8 +140,7 @@ struct lkl_dev_blk_ops {
 #define AUX_CNT 32
 #define DYN_CNT 32
 
-
-
+#define MAX_LIBOS_PATH 50
 
 #define MAX_CVMS	10
 #if 0
@@ -238,6 +237,9 @@ struct s_box {
 //
 	struct s_box *inner;
 	struct s_box *outer;
+	
+	unsigned long syscall_handler;
+	char libos[MAX_LIBOS_PATH];
 };
 
 

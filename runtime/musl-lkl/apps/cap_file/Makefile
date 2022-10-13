@@ -6,7 +6,7 @@ MOUNTPOINT=/media/ext4disk
 DISK=disk.img
 
 LOOP_DEVICE=loop9
-IMAGE_SIZE_KB=200
+IMAGE_SIZE_KB=256
 
 ESCALATE_CMD=sudo
 

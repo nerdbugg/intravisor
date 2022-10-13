@@ -54,6 +54,7 @@
 
 static void *memcopy(void *dest, const void *src, unsigned long n);
 static void *map_file(char *file_to_map, struct stat* sb);
+static void *mmap_file(char *file_to_map, struct stat* sb);
 static int copy_in(char *filename, void *address);
 
 #ifdef __linux__ 
@@ -72,9 +73,8 @@ void load_elf(char* file_to_map, void *base_addr, encl_map_info* result) {
     unsigned long initial_vaddr = 0, load_segments_size;
     unsigned int mapflags = MAP_PRIVATE;
 
-    /* TODO Do not copy the whole file into memory instead of doing a
-     * file-backed mmap? */
-    mapped = map_file(file_to_map, &sb);
+    // mapped = map_file(file_to_map, &sb);
+    mapped = mmap_file(file_to_map, &sb);
 
     if(mapped < 0) {
         result->base = (void *)-1;
@@ -302,6 +302,25 @@ void *map_file(char *file_to_map, struct stat* sb) {
     }
 
     copy_in(file_to_map, mapped);
+
+    return mapped;
+}
+
+void *mmap_file(char *file_to_map, struct stat* sb) {
+    void *mapped;
+    int fd = open(file_to_map, 0, 0);
+    if (fstat(fd, sb) < 0)
+    {
+        return (void *)-1;
+    }
+
+    mapped = mmap(NULL, sb->st_size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE, fd, 0);
+    close(fd);
+    if (mapped == (void *)-1)
+    {
+		perror("mmap");
+        return (void *)-1;
+    }
 
     return mapped;
 }

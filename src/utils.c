@@ -63,6 +63,7 @@ void place_canaries(unsigned long *begin, long size, long magic) {
 #else
 //			NCPRINT("mprotecting %p\n", &begin[i * STACK_SIZE / 8]);
 #endif
+			// does not exec
 			if(mprotect(&begin[i * STACK_SIZE / 8], 4096, PROT_READ) == -1) {
 				perror("mprotect");while(1);
 			  }

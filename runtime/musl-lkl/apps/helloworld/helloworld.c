@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
 
 #define HW_FILE "/app/helloworld.txt"
 
@@ -9,6 +10,12 @@ static __inline__ void * getSP(void) {
     register void * sp asm("sp");
     asm ("" : "=r"(sp));
     return sp;
+}
+
+unsigned long gettime() {
+	struct timeval t;
+	gettimeofday(&t, 0);
+	return ((unsigned long)t.tv_sec) * 1000 + t.tv_usec / 1000 ;
 }
 
 int main(int argc, char **argv)
@@ -20,7 +27,7 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    printf("getSP = %p\n", getSP);
+    printf("[%d] getSP = %p, &buf = %x\n", gettime(), getSP, buf);
 
     // Prints first line of file /app/helloworld.txt (max 100 characters)
     if (fgets(buf, sizeof(buf), f) == buf) {

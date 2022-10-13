@@ -4,9 +4,13 @@ int host_write(char *ptr, int size) {
 	register long a0 __asm__("a0") = (long) ptr;
 	register long a1 __asm__("a1") = (long) size;
 
-	__asm__ __volatile__("jal c_out" : "=r"(a0) : "r"(t5), "r"(a0), "r"(a1) : "memory" );
+	__asm__ __volatile__(
+		"jal c_out"
+		: "=r"(a0) // 可写 通用寄存器, 输出
+		: "r"(t5), "r"(a0), "r"(a1) // 只读操作数, 输入
+		: "memory" );
 
-	return a0; 
+	return a0;
 }
 
 void host_exit() {
