@@ -1,5 +1,6 @@
 #include "monitor.h"
 #include "time.h"
+#include "assert.h"
 
 struct s_box	cvms[MAX_CVMS];
 
@@ -96,7 +97,7 @@ void *init_thread(void *arg) {
 		if(me->sbox->lkl_disk.fd < 0) {
 			printf("cannot open disk '%s'\n", me->sbox->disk_image); while(1);
 		}
-	} else 
+	} else
 		me->sbox->lkl_disk.fd = -1;
 
 	me->sbox->lkl_disk.ops = &lkl_dev_blk_ops;
@@ -219,6 +220,7 @@ void *init_thread(void *arg) {
 	printf("-----------------------------------------------\n");
 	__asm__ __volatile__("mv sp, %0;" :: "r"(sp) : "memory");
 	__asm__ __volatile__("mv tp, %0;" :: "r"(me->c_tp) : "memory");
+	// checkpoint(0x20000000, 0x10000000, "/tmp/checkpoint1");
 	cinv(
 #if 0
 		  sealed_codecap,  	//ca0:	entrance
@@ -471,7 +473,10 @@ int build_cvm(int cid, struct cmp_s *comp, char *libos, char *disk, int argc, ch
 
 pthread_t run_cvm(int cid) {
 	struct c_thread *ct = cvms[cid].threads;
-
+	// 我不知道为什么, 这里sbox总会被设置到 cvms[2] 的地址.
+	ct[0].sbox = &cvms[cid];
+	printf("run_cvm: cid=%d, ct->sbox=%x, cvm[cid]=%x, cvm[2]=%x\n", cid, ct->sbox, cvms+cid, cvms+2);
+	assert(ct->sbox == cvms + cid);
 	int ret = pthread_create(&ct[0].tid, &ct[0].tattr, init_thread, &ct[0]);
 	if(ret != 0) {
 		perror("pthread create");printf("ret = %d\n", ret);
@@ -528,7 +533,7 @@ int gen_caps(struct s_box *cvm, struct c_thread *ct) {
 	if (sysctlbyname("security.cheri.sealcap", &ct->sbox->box_caps.sealcap, &ct->sbox->box_caps.sealcap_size, NULL, 0) < 0) {
 		printf("sysctlbyname(security.cheri.sealcap)\n");while(1);
 	}
-
+	assert(ct->sbox == cvm);
 	void * __capability ccap;
 	if(cvm->pure)
 		ccap = pure_codecap_create((void *) ct->sbox->cmp_begin, (void *) ct->sbox->cmp_end);
@@ -547,7 +552,7 @@ int gen_caps(struct s_box *cvm, struct c_thread *ct) {
 	// ddc = 0x53d20
 	ct->sbox->box_caps.sealed_codecap = cheri_seal(ccap, ct->sbox->box_caps.sealcap);
 	// ppc = 0x53d00
-
+	assert(ct->sbox == cvm);
 	//probe capabilitites for syscall/hostcall. 
 	if(ct->cb_out == NULL) {
 		printf("callback_out is empty, use default 'monitor'\n");
@@ -570,6 +575,7 @@ int gen_caps(struct s_box *cvm, struct c_thread *ct) {
 
 		host_syscall_handler_adv(cvm->libos, sealed_syscall_pcc_cap, ct->sbox->box_caps.sealed_datacap);
 	}
+	assert(ct->sbox == cvm);
 }
 
 int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[]) {
@@ -597,12 +603,12 @@ int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[]) {
 	cvm->fd = STDOUT_FILENO;
 	// todo: cvm->disk_image, when running baremetal, disk_image is NULL;
 	struct c_thread *ct = cvm[cid].threads;
+	memcpy(&ct[0], &t_cvm->threads[0], sizeof(struct c_thread));
 	for(int i=0; i<MAX_THREADS; i++) {
 		ct[i].id = -1;
 		ct[i].sbox = cvm;
 	}
-
-	memcpy(&ct[0], &t_cvm->threads[0], sizeof(struct c_thread));
+	
 	ct[0].stack = (void *)((unsigned long)cvm->top - STACK_SIZE);
 	ct[0].argc = argc;
 	ct[0].argv = argv;
@@ -612,7 +618,9 @@ int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[]) {
 	if(ret != 0) {
 		perror("attr init");printf("ret = %d\n", ret); while(1);
 	}
-
+	for(int i=0; i<MAX_THREADS; ++i) {
+		assert(cvm == ct[i].sbox);
+	}
 	ret = pthread_attr_setstack(&ct[0].tattr, ct[0].stack, STACK_SIZE);
 	if(ret != 0) {
 		perror("pthread attr setstack");printf("ret = %d\n", ret); while(1);
@@ -626,13 +634,21 @@ int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[]) {
 	for (int j = from; j < to; j++)
                CPU_SET(j, &cvms[cid].cpuset);
 
+	for(int i=0; i<MAX_THREADS; ++i) {
+		assert(cvm == ct[i].sbox);
+	}
+
 	ret  = pthread_attr_setaffinity_np(&ct[0].tattr, sizeof(cvms[cid].cpuset), &cvms[cid].cpuset);
 	if (ret != 0) {
 		perror("pthread set affinity");printf("ret = %d\n", ret);
 	}
 
 #endif
-	// gen_caps(cvm, &ct[0]);
+	gen_caps(cvm, &ct[0]);
+	
+	for(int i=0; i<MAX_THREADS; ++i) {
+		assert(cvm == ct[i].sbox);
+	}
 }
 
 int find_template(int cid, char *libos) {
@@ -767,6 +783,8 @@ int deploy_cvm(struct cvm *f) {
 	else {
 		fork_cvm(cid, t_cid, &comp, c_argc, c_argv);
 	}
+	cvms[cid].wait = f->wait;
+	return cid;
 }
 
 int link_cvm(struct cvm *flist) {
@@ -819,7 +837,8 @@ int main(int argc, char *argv[]) {
 		for (struct cvm *f = state->flist; f; f = f->next) {
 			printf("***************** Deploy '%s' ***************\n", f->name);
 			printf("BUILDING cvm: name=%s, disk=%s, runtime=%s, net=%s, args='%s', base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, cb_in = '%s', cb_out = '%s' wait = %ds\n", f->name, f->disk, f->runtime, f->net, f->args, f->isol.base, f->isol.size, f->isol.begin, f->isol.end, f->cb_in, f->cb_out, f->wait);
-			deploy_cvm(f);
+			int cid = deploy_cvm(f);
+			printf("BUILDING cvm complete: cid=%d, disk=%s, runtime=%s, base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, syscall_handler = '%ld', ret_from_mon = '%ld'\n", cid, cvms[cid].disk_image, cvms[cid].libos, cvms[cid].base, cvms[cid].box_size, cvms[cid].cmp_begin, cvms[cid].cmp_end, cvms[cid].syscall_handler, cvms[cid].ret_from_mon);
 		}
 
 		printf("***************** Link Inner<-->Outer ***************\n");
@@ -828,23 +847,25 @@ int main(int argc, char *argv[]) {
 		printf("[%d ms] ***************** ALL cVMs loaded ***************\n", gettime());
 		void *cret;
 		pthread_t tid;
-		for (struct cvm *f = state->flist; f; f = f->next) {
-			tid = run_cvm(f->isol.base / 0x10000000);
-
-			if(f->wait == -1) {
-				printf("pthread join, tid=%d, isol.base=%p\n", tid, f->isol.base);
+		for (int i = 0; i<MAX_CVMS; ++i) {
+			if(cvms[i].cmp_begin == 0) {
+				continue;
+			}
+			tid = run_cvm(i);
+			printf("f->wait=%d\n", cvms[i].wait);
+			if(cvms[i].wait == -1) {
+				printf("pthread join, tid=%d, isol.base=%p\n", tid, cvms[i].base);
 				pthread_join(tid, &cret);
 				printf("join returned\n");
 			}
 			else
-				sleep(f->wait);
+				sleep(cvms[i].wait);
 		}
-
-		//wait completion
-		// for (int i = 0; i < MAX_CVMS; i++) {
-		// 	struct c_thread *ct = cvms[i].threads;
-		// 	pthread_join(ct[0].tid, &cret);
-		// }
+		// wait completion
+		for (int i = 0; i < MAX_CVMS; i++) {
+			struct c_thread *ct = cvms[i].threads;
+			pthread_join(ct[0].tid, &cret);
+		}
 
 	} else {
 		default_cvm(runtime_so, disk_img, argc - skip_argc, argv);

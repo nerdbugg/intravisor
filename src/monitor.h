@@ -240,6 +240,7 @@ struct s_box {
 	
 	unsigned long syscall_handler;
 	char libos[MAX_LIBOS_PATH];
+	int wait;
 };
 
 

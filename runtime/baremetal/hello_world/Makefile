@@ -24,10 +24,12 @@ libhello.so: $(OBJ)
 
 libhello_debug.so: libhello.so
 	$(CC_CHERI) $(CC_CHERI_FLAGS) $(CFLAGS) -o $@ -nostdinc -nostdlib -Wl,--image-base,0x20000000 -Wl,-ehello_asm -fPIE -fPIC $(OBJ)
+	$(CC_CHERI) $(CC_CHERI_FLAGS) $(CFLAGS) -o libhello_debug3.so -nostdinc -nostdlib -Wl,--image-base,0x30000000 -Wl,-ehello_asm -fPIE -fPIC $(OBJ)
 
 libhello_bypass_debug.so: $(OBJ) bypass.o
 	$(CC_CHERI) $(CC_CHERI_FLAGS) $(CFLAGS) -o libhello_bypass.so -nostdinc -nostdlib -Wl,-ehello_asm -fPIE -fPIC $(OBJ) bypass.o
 	$(CC_CHERI) $(CC_CHERI_FLAGS) $(CFLAGS) -o $@ -nostdinc -nostdlib -Wl,--image-base,0x20000000 -Wl,-ehello_asm -fPIE -fPIC $(OBJ) bypass.o
+	$(CC_CHERI) $(CC_CHERI_FLAGS) $(CFLAGS) -o libhello_bypass_debug3.so -nostdinc -nostdlib -Wl,--image-base,0x30000000 -Wl,-ehello_asm -fPIE -fPIC $(OBJ) bypass.o
 
 clean:
 	rm -rf ./*.o ./*.so
