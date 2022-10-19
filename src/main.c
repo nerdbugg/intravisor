@@ -35,7 +35,7 @@ uint64_t gettime() {
 
 void *init_thread(void *arg) {
 	struct c_thread *me = (struct c_thread *)arg;
-	void *sp_read = me->stack + me->stack_size;//getSP();
+	void *sp_read = me->stack + me->stack_size; //getSP(); = 0x2ff80000 + 524288 = 0x3000 0000 = cmp_end
 	char argv1[128];
 	char lc1[128];
 	char env1[128];
@@ -473,10 +473,11 @@ int build_cvm(int cid, struct cmp_s *comp, char *libos, char *disk, int argc, ch
 
 pthread_t run_cvm(int cid) {
 	struct c_thread *ct = cvms[cid].threads;
-	// 我不知道为什么, 这里sbox总会被设置到 cvms[2] 的地址.
+	// 我不知道为什么, 这里 ct 的属性会被总会被模板的 ct 覆盖.
 	ct[0].sbox = &cvms[cid];
+	ct[0].stack = ct[0].sbox->top - STACK_SIZE;
 	printf("run_cvm: cid=%d, ct->sbox=%x, cvm[cid]=%x, cvm[2]=%x\n", cid, ct->sbox, cvms+cid, cvms+2);
-	assert(ct->sbox == cvms + cid);
+	// assert(ct->sbox == cvms + cid);
 	int ret = pthread_create(&ct[0].tid, &ct[0].tattr, init_thread, &ct[0]);
 	if(ret != 0) {
 		perror("pthread create");printf("ret = %d\n", ret);
@@ -533,7 +534,7 @@ int gen_caps(struct s_box *cvm, struct c_thread *ct) {
 	if (sysctlbyname("security.cheri.sealcap", &ct->sbox->box_caps.sealcap, &ct->sbox->box_caps.sealcap_size, NULL, 0) < 0) {
 		printf("sysctlbyname(security.cheri.sealcap)\n");while(1);
 	}
-	assert(ct->sbox == cvm);
+	// assert(ct->sbox == cvm);
 	void * __capability ccap;
 	if(cvm->pure)
 		ccap = pure_codecap_create((void *) ct->sbox->cmp_begin, (void *) ct->sbox->cmp_end);
@@ -552,7 +553,7 @@ int gen_caps(struct s_box *cvm, struct c_thread *ct) {
 	// ddc = 0x53d20
 	ct->sbox->box_caps.sealed_codecap = cheri_seal(ccap, ct->sbox->box_caps.sealcap);
 	// ppc = 0x53d00
-	assert(ct->sbox == cvm);
+	// assert(ct->sbox == cvm);
 	//probe capabilitites for syscall/hostcall. 
 	if(ct->cb_out == NULL) {
 		printf("callback_out is empty, use default 'monitor'\n");
@@ -575,7 +576,7 @@ int gen_caps(struct s_box *cvm, struct c_thread *ct) {
 
 		host_syscall_handler_adv(cvm->libos, sealed_syscall_pcc_cap, ct->sbox->box_caps.sealed_datacap);
 	}
-	assert(ct->sbox == cvm);
+	// assert(ct->sbox == cvm);
 }
 
 int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[]) {
@@ -618,9 +619,7 @@ int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[]) {
 	if(ret != 0) {
 		perror("attr init");printf("ret = %d\n", ret); while(1);
 	}
-	for(int i=0; i<MAX_THREADS; ++i) {
-		assert(cvm == ct[i].sbox);
-	}
+	
 	ret = pthread_attr_setstack(&ct[0].tattr, ct[0].stack, STACK_SIZE);
 	if(ret != 0) {
 		perror("pthread attr setstack");printf("ret = %d\n", ret); while(1);
@@ -634,10 +633,6 @@ int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[]) {
 	for (int j = from; j < to; j++)
                CPU_SET(j, &cvms[cid].cpuset);
 
-	for(int i=0; i<MAX_THREADS; ++i) {
-		assert(cvm == ct[i].sbox);
-	}
-
 	ret  = pthread_attr_setaffinity_np(&ct[0].tattr, sizeof(cvms[cid].cpuset), &cvms[cid].cpuset);
 	if (ret != 0) {
 		perror("pthread set affinity");printf("ret = %d\n", ret);
@@ -645,10 +640,6 @@ int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[]) {
 
 #endif
 	gen_caps(cvm, &ct[0]);
-	
-	for(int i=0; i<MAX_THREADS; ++i) {
-		assert(cvm == ct[i].sbox);
-	}
 }
 
 int find_template(int cid, char *libos) {
