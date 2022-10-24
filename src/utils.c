@@ -1,5 +1,23 @@
 #include "monitor.h"
 
+uint64_t get_ms_timestamp() {
+	struct timeval t;
+	gettimeofday(&t, 0);
+	return ((uint64_t)t.tv_sec) * 1000 + t.tv_usec / 1000;
+}
+
+// store the timestamp(ms) of monitor startup
+uint64_t starttime = 0;
+
+uint64_t gettime() {
+	struct timeval t;
+	gettimeofday(&t, 0);
+	return get_ms_timestamp() - starttime;
+}
+
+int sboxptr_to_cid (struct s_box *p) {
+	return ((uint64_t)p - (uint64_t)cvms)/sizeof(struct s_box);
+}
 
 unsigned long mon_to_comp(unsigned long addr, struct s_box *sbox)  {
 	return (addr - (!sbox->pure)*sbox->cmp_begin);

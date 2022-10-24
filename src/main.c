@@ -9,10 +9,9 @@ struct s_box	cvms[MAX_CVMS];
 int timers = 0;
 int debug_calls = 0;
 //
-
 pthread_mutex_t print_lock;
-uint64_t starttime = 0;
 
+extern uint64_t starttime;
 // extern host_syscall_handler_adv(char *, void * __capability pcc, void * __capability ddc, void * __capability pcc2);
 extern host_syscall_handler_prb(char *name, void *, void *, void *);
 extern void tp_write();
@@ -27,14 +26,10 @@ extern void __inline__ cinv(void *, void *, void *, void *, void *, void *, void
 extern void cinv(void *, void *);
 #endif
 
-uint64_t gettime() {
-	struct timeval t;
-	gettimeofday(&t, 0);
-	return ((uint64_t)t.tv_sec) * 1000 + t.tv_usec / 1000 - starttime ;
-}
 
-void *init_thread(void *arg) {
-	struct c_thread *me = (struct c_thread *)arg;
+void *init_thread(int cid) {
+	struct c_thread *me = &cvms[cid].threads[0];
+	// assert(me->sbox != 0);
 	void *sp_read = me->stack + me->stack_size; //getSP(); = 0x2ff80000 + 524288 = 0x3000 0000 = cmp_end
 	char argv1[128];
 	char lc1[128];
@@ -214,7 +209,6 @@ void *init_thread(void *arg) {
 	//                      0x2ff81000
 	me->c_tp = mon_to_comp(me->c_tp, me->sbox);
 	// me->c_tp = 0xff81000
-
 	printf("[%3d ms]: finish init_thread\n", gettime());
 	printf("HW: sp = %p, tp = %p\n", sp, me->c_tp);
 	printf("-----------------------------------------------\n");
@@ -388,27 +382,8 @@ int build_cvm(int cid, struct cmp_s *comp, char *libos, char *disk, int argc, ch
 	memset(cvms[cid].libos, 0, MAX_LIBOS_PATH);
 	strcpy(cvms[cid].libos, libos);
 
-	if (pthread_mutex_init(&cvms[cid].ct_lock, NULL) != 0) {
-		printf("\n mutex init failed\n");
-		return 1;
-	}
-
+	
 //	printf("cvms.base = %p, cvms.box_size = %lx\n", cvms[cid].base, cvms[cid].box_size);
-
-	void *addr = (void *)((unsigned long) cvms[cid].top - cvms[cid].stack_size);
-	void *addr_ret = mmap(addr, cvms[cid].stack_size, PROT_READ | PROT_WRITE , MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
-	if (addr_ret == MAP_FAILED){
-		perror("mmap");
-		return 1;
-	} else
-		printf("[cVM STACKs] = [%p -- %lx]\n", addr_ret, (unsigned long) addr_ret + (cvms[cid].stack_size));
-
-	cvms[cid].stack = addr_ret;
-
-	memset(cvms[cid].stack, 0, cvms[cid].stack_size);
-
-	place_canaries(addr, cvms[cid].stack_size, 0xabbacaca);
-	check_canaries(addr, cvms[cid].stack_size, 0xabbacaca);
 
 	cvms[cid].cmp_begin = cmp_begin;
 	cvms[cid].cmp_end = cmp_end;
@@ -440,51 +415,12 @@ int build_cvm(int cid, struct cmp_s *comp, char *libos, char *disk, int argc, ch
 	ct[0].argc = argc;
 	ct[0].argv = argv;
 
-	ret = pthread_attr_init(&ct[0].tattr);
-	if(ret != 0) {
-		perror("attr init");printf("ret = %d\n", ret); while(1);
-	}
-
-	ret = pthread_attr_setstack(&ct[0].tattr, ct[0].stack, STACK_SIZE);
-	if(ret != 0) {
-		perror("pthread attr setstack");printf("ret = %d\n", ret); while(1);
-	}
-
-#ifdef __linux__
-//	int from = (cid - 2) * 2;
-//	int to  = ((cid - 2) + 1) * 2;
-	int from = 0; int to = 4;
-	CPU_ZERO(&cvms[cid].cpuset);
-	for (int j = from; j < to; j++)
-               CPU_SET(j, &cvms[cid].cpuset);
-
-	ret  = pthread_attr_setaffinity_np(&ct[0].tattr, sizeof(cvms[cid].cpuset), &cvms[cid].cpuset);
-	if (ret != 0) {
-		perror("pthread set affinity");printf("ret = %d\n", ret);
-	}
-
-#endif
-/*** gen caps ***/
-
-//do we really need to save the sealcap?
+	/*** gen caps ***/
+	//do we really need to save the sealcap?
 	gen_caps(&cvms[cid], &ct[0]);
 	return 0;
 }
 
-pthread_t run_cvm(int cid) {
-	struct c_thread *ct = cvms[cid].threads;
-	// 我不知道为什么, 这里 ct 的属性会被总会被模板的 ct 覆盖.
-	ct[0].sbox = &cvms[cid];
-	ct[0].stack = ct[0].sbox->top - STACK_SIZE;
-	printf("run_cvm: cid=%d, ct->sbox=%x, cvm[cid]=%x, cvm[2]=%x\n", cid, ct->sbox, cvms+cid, cvms+2);
-	// assert(ct->sbox == cvms + cid);
-	int ret = pthread_create(&ct[0].tid, &ct[0].tattr, init_thread, &ct[0]);
-	if(ret != 0) {
-		perror("pthread create");printf("ret = %d\n", ret);
-	}
-
-	return ct[0].tid;
-}
 
 void parse_cmdline(char *argv[], const char *disk_img, const char *runtime_so, char **yaml_cfg, int *skip_argc) {
 	for (++argv; *argv; ++argv)
@@ -582,29 +518,28 @@ int gen_caps(struct s_box *cvm, struct c_thread *ct) {
 int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[]) {
 	struct s_box *t_cvm = &cvms[t_cid];
 	struct s_box *cvm = &cvms[cid];
-
-	printf("prepare to invoke tfork syscall, src_addr=%p, dst_addr=%p, len=%d\n", 0x20000000, cmp->begin, cmp->size);
-	if (tfork(0x20000000, cmp->begin, cmp->size) == TFORK_FAILED) {
-		printf("tfork FAILED\n");
-		return 1;
-	}
-	printf("tfork complete\n");
-	memcpy(cvm, t_cvm, sizeof(struct s_box));
+	
 	cvm->base = cmp->base;
 	cvm->top = (void *) ((unsigned long) cmp->base + cmp->size);
+	// memcpy(&cvm->box_caps, &t_cvm->box_caps, sizeof(struct box_caps_s));
+	cvm->entry = t_cvm->entry;
+	cvm->ret_from_mon = t_cvm->ret_from_mon;
+	strcpy(cvm->disk_image, t_cvm->disk_image);
+	cvm->fd = t_cvm->fd;
+	cvm->pure = t_cvm->pure;
+	cvm->syscall_handler = t_cvm->syscall_handler;
+	strcpy(cvm->libos, t_cvm->libos);
 
 	if (pthread_mutex_init(&cvms[cid].ct_lock, NULL) != 0) {
 		printf("\n mutex init failed\n");
 		return 1;
 	}
 
-	cvm->stack = cvm->top - cvm->stack_size;
-	cvm->cmp_begin = cmp->begin;
-	cvm->cmp_end = cmp->end;
-	cvm->fd = STDOUT_FILENO;
 	// todo: cvm->disk_image, when running baremetal, disk_image is NULL;
-	struct c_thread *ct = cvm[cid].threads;
-	memcpy(&ct[0], &t_cvm->threads[0], sizeof(struct c_thread));
+	struct c_thread *ct = cvm->threads;
+ 	pthread_t cur_cid = ct->tid;
+	memcpy(ct, t_cvm->threads, sizeof(struct c_thread));
+	ct->tid = cur_cid;
 	for(int i=0; i<MAX_THREADS; i++) {
 		ct[i].id = -1;
 		ct[i].sbox = cvm;
@@ -614,17 +549,6 @@ int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[]) {
 	ct[0].argc = argc;
 	ct[0].argv = argv;
 
-	int ret;
-	ret = pthread_attr_init(&ct[0].tattr);
-	if(ret != 0) {
-		perror("attr init");printf("ret = %d\n", ret); while(1);
-	}
-	
-	ret = pthread_attr_setstack(&ct[0].tattr, ct[0].stack, STACK_SIZE);
-	if(ret != 0) {
-		perror("pthread attr setstack");printf("ret = %d\n", ret); while(1);
-	}
-
 	#ifdef __linux__
 //	int from = (cid - 2) * 2;
 //	int to  = ((cid - 2) + 1) * 2;
@@ -633,13 +557,13 @@ int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[]) {
 	for (int j = from; j < to; j++)
                CPU_SET(j, &cvms[cid].cpuset);
 
-	ret  = pthread_attr_setaffinity_np(&ct[0].tattr, sizeof(cvms[cid].cpuset), &cvms[cid].cpuset);
+	int ret = pthread_attr_setaffinity_np(&ct[0].tattr, sizeof(cvms[cid].cpuset), &cvms[cid].cpuset);
 	if (ret != 0) {
 		perror("pthread set affinity");printf("ret = %d\n", ret);
 	}
 
 #endif
-	gen_caps(cvm, &ct[0]);
+	gen_caps(cvm, ct);
 }
 
 int find_template(int cid, char *libos) {
@@ -652,37 +576,6 @@ int find_template(int cid, char *libos) {
 		}
 	}
 	return -1;
-}
-
-int default_cvm(char *runtime_so, char *disk_img, int argc, char *argv[]) {
-	struct cmp_s comp;
-	#if 1
-		comp.base = 0x20000000;		/* base addr */
-		comp.size = 0x10000000;		/* size */
-	#ifdef SIM
-		comp.begin = 0x0;		/* cmp_begin */
-	#else
-		comp.begin = 0x10000000;		/* cmp_begin */
-	#endif
-		comp.end = 0x30000000;		/* cmp_end  */
-
-
-		build_cvm( 2,			/* box id */
-				&comp,
-				runtime_so, 	/* libOS+init */
-				disk_img,		/* user disk */
-				argc,
-				argv,
-				"monitor",		/* CB_out */
-				0 				/* CB_IN */
-			);
-
-		pthread_t tid = run_cvm(2);
-
-		void *cret;
-		pthread_join(tid, &cret);
-
-	#endif
 }
 
 int monitor_init() {
@@ -774,7 +667,7 @@ int deploy_cvm(struct cvm *f) {
 	else {
 		fork_cvm(cid, t_cid, &comp, c_argc, c_argv);
 	}
-	cvms[cid].wait = f->wait;
+	// assert(cvms[cid].threads[0].sbox != 0);
 	return cid;
 }
 
@@ -795,9 +688,33 @@ int link_cvm(struct cvm *flist) {
 	}
 }
 
+int cvm_worker(struct cvm *f) {
+	printf("***************** Deploy '%s' ***************\n", f->name);
+	printf("BUILDING cvm: name=%s, disk=%s, runtime=%s, net=%s, args='%s', base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, cb_in = '%s', cb_out = '%s' wait = %ds\n", f->name, f->disk, f->runtime, f->net, f->args, f->isol.base, f->isol.size, f->isol.begin, f->isol.end, f->cb_in, f->cb_out, f->wait);
+	int cid = deploy_cvm(f);
+	printf("BUILDING cvm complete: cid=%d, disk=%s, runtime=%s, base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, syscall_handler = '%ld', ret_from_mon = '%ld'\n", cid, cvms[cid].disk_image, cvms[cid].libos, cvms[cid].base, cvms[cid].box_size, cvms[cid].cmp_begin, cvms[cid].cmp_end, cvms[cid].syscall_handler, cvms[cid].ret_from_mon);
+	init_thread(cid);
+}
+
+int init_cvm_stack(struct s_box *cvm) {
+	struct c_thread *ct = &cvm->threads[0];
+	int ret = mmap(ct->stack, ct->stack_size, PROT_READ | PROT_WRITE , MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
+	if (ret == MAP_FAILED) {
+		perror("mmap");
+		return 1;
+	} else
+		printf("[cVM STACKs] = [%p -- %lx]\n", ct->stack, (unsigned long) ct->stack + ct->stack_size);
+
+	memset(ct->stack, 0, ct->stack_size);
+
+	place_canaries(ct->stack, ct->stack_size, 0xabbacaca);
+	check_canaries(ct->stack, ct->stack_size, 0xabbacaca);
+	return 0;
+}
+
 int main(int argc, char *argv[]) {
 //	printf("hello world %d %s\n", argc, argv[1]);
-	starttime = gettime();
+	starttime = get_ms_timestamp();
 	char *disk_img = "./disk.img";
 	char *yaml_cfg = 0;
 	char *runtime_so = "libcarrie.so";
@@ -809,56 +726,92 @@ int main(int argc, char *argv[]) {
 	}
 
 	parse_cmdline(argv, disk_img, runtime_so, &yaml_cfg, &skip_argc);
-	
-//at this stage, cvmss have fixe size and should begin at from X*0x10000000. This is used
-//for identification of box ID and threads ID. In the future, this should be replaced 
-// by something more smart. So far compartment ID are not implemented in HW, so, maybe hashtable
-	if(yaml_cfg) {
-		struct parser_state *state = run_yaml_scenario(yaml_cfg);
-		if(state == 0) {
-			printf("yaml is corrupted, die\n"); exit(1);
-		}
 
-		for (struct capfile *f = state->clist; f; f = f->next) {
-//			printf("capfile: name=%s, data='%s', size=0x%lx, addr=0x%lx \n", f->name, f->data, f->size, f->addr);
-			build_capfile(f);
-		}
-
-		printf("[%3d ms]: finish parse yaml\n", gettime());
-		for (struct cvm *f = state->flist; f; f = f->next) {
-			printf("***************** Deploy '%s' ***************\n", f->name);
-			printf("BUILDING cvm: name=%s, disk=%s, runtime=%s, net=%s, args='%s', base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, cb_in = '%s', cb_out = '%s' wait = %ds\n", f->name, f->disk, f->runtime, f->net, f->args, f->isol.base, f->isol.size, f->isol.begin, f->isol.end, f->cb_in, f->cb_out, f->wait);
-			int cid = deploy_cvm(f);
-			printf("BUILDING cvm complete: cid=%d, disk=%s, runtime=%s, base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, syscall_handler = '%ld', ret_from_mon = '%ld'\n", cid, cvms[cid].disk_image, cvms[cid].libos, cvms[cid].base, cvms[cid].box_size, cvms[cid].cmp_begin, cvms[cid].cmp_end, cvms[cid].syscall_handler, cvms[cid].ret_from_mon);
-		}
-
-		printf("***************** Link Inner<-->Outer ***************\n");
-		link_cvm(state->flist);
-
-		printf("[%d ms] ***************** ALL cVMs loaded ***************\n", gettime());
-		void *cret;
-		pthread_t tid;
-		for (int i = 0; i<MAX_CVMS; ++i) {
-			if(cvms[i].cmp_begin == 0) {
-				continue;
-			}
-			tid = run_cvm(i);
-			printf("f->wait=%d\n", cvms[i].wait);
-			if(cvms[i].wait == -1) {
-				printf("pthread join, tid=%d, isol.base=%p\n", tid, cvms[i].base);
-				pthread_join(tid, &cret);
-				printf("join returned\n");
-			}
-			else
-				sleep(cvms[i].wait);
-		}
-		// wait completion
-		for (int i = 0; i < MAX_CVMS; i++) {
-			struct c_thread *ct = cvms[i].threads;
-			pthread_join(ct[0].tid, &cret);
-		}
-
-	} else {
-		default_cvm(runtime_so, disk_img, argc - skip_argc, argv);
+	if(yaml_cfg == 0) {
+		// doesn't have -y *.yaml
+		// default_cvm(runtime_so, disk_img, argc - skip_argc, argv);
+		printf("usage: monitor -y config.yaml\n"); exit(1);
 	}
+
+	struct parser_state *state = run_yaml_scenario(yaml_cfg);
+	if(state == 0) {
+		printf("yaml is corrupted, die\n"); exit(1);
+	}
+	printf("[%3d ms]: finish parse yaml\n", gettime());
+
+	for (struct capfile *f = state->clist; f; f = f->next) {
+		// printf("capfile: name=%s, data='%s', size=0x%lx, addr=0x%lx \n", f->name, f->data, f->size, f->addr);
+		build_capfile(f);
+	}
+
+	// printf("***************** Link Inner<-->Outer ***************\n");
+	// link_cvm(state->flist);
+
+	void *cret;
+	
+	for (struct cvm *f = state->flist; f; f = f->next) {
+		int cid = f->isol.base / 0x10000000;
+		printf("Deploy cthread of cvm, cid=%d\n", cid);
+		struct s_box *cvm = &cvms[cid];
+		struct c_thread *ct = cvm->threads;
+
+		cvm->start_time = get_ms_timestamp();
+
+		if (pthread_mutex_init(& cvm->ct_lock, NULL) != 0) {
+			printf("\n mutex init failed\n");
+			return 1;
+		}
+		int ret;
+		ret = pthread_attr_init(&ct->tattr);
+		if(ret != 0) {
+			perror("attr init");printf("ret = %d\n", ret); while(1);
+		}
+
+		cvm->cmp_begin = f->isol.begin;
+		cvm->cmp_end = f->isol.end;
+		cvm->box_size = f->isol.size;
+		ct->stack_size = (MAX_THREADS + 1) * STACK_SIZE;
+		ct->stack = cvm->cmp_end - ct->stack_size;
+		
+		int t_cid = find_template(cid, f->runtime);
+		if (t_cid < 0) {
+			init_cvm_stack(cvm);
+		} else {
+			printf("prepare to invoke tfork syscall, src_addr=%p, dst_addr=%p, len=%d\n", cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size);
+			if (tfork(cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size) == TFORK_FAILED) {
+				printf("tfork FAILED\n");
+				return 1;
+			}
+			printf("tfork complete\n");
+		}
+
+		ret = pthread_attr_setstack(&ct->tattr, ct->stack, ct->stack_size);
+		if(ret != 0) {
+			perror("pthread attr setstack");printf("ret = %d\n", ret); while(1);
+		}	
+
+		ret = pthread_create(&ct->tid, &ct->tattr, cvm_worker, f);
+		printf("pthread_create ret = %d\n", ret);
+		if(ret != 0) {
+			perror("pthread_create"); 
+			// exit(1);
+		}
+
+		printf("f->wait=%d\n", f->wait);
+		if(f->wait == -1) {
+			printf("pthread join, tid=%d, isol.base=%p\n", ct->tid, f->isol.base);
+			pthread_join(ct->tid, &cret);
+			printf("join returned\n");
+		}
+		else
+			sleep(f->wait);
+	}
+	
+	// wait completion
+	for (int i = 0; i < MAX_CVMS; i++) {
+		struct c_thread *ct = cvms[i].threads;
+		pthread_join(ct[0].tid, &cret);
+	}
+	printf("all cvm exit, monitor exit.\n");
+	return 0;
 }
