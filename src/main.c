@@ -271,6 +271,7 @@ void sig_handler(int j, siginfo_t *si, void *uap) {
 		printf("gp_a[%d]\t%lx\n", i, a[i]);
 	}
 #endif
+	printf("program receive trap signal, press Ctrl+c to exit.\n");
 	while(1);
 }
 
@@ -314,7 +315,6 @@ int build_cvm(int cid, struct cmp_s *comp, char *libos, char *disk, int argc, ch
 	unsigned long size = comp->size;
 	unsigned long cmp_begin = comp->begin;
 	unsigned long cmp_end = comp->end;
-
 
 	memset(&encl_map, 0, sizeof(struct encl_map_info));
 
@@ -651,7 +651,7 @@ int deploy_cvm(struct cvm *f) {
 	comp.size = f->isol.size;		/* size */
 	comp.begin = f->isol.begin;		/* cmp_begin */
 	comp.end = f->isol.end;			/* cmp_end  */
-	int t_cid = find_template(cid, f->runtime);
+	int t_cid = cvms[cid].t_cid;
 	if (t_cid < 0) {
 		//todo: sanitise base addresses, check cvms/sbox max number
 		build_cvm(cid, //so far it is the best I can offer. 
@@ -775,8 +775,10 @@ int main(int argc, char *argv[]) {
 		
 		int t_cid = find_template(cid, f->runtime);
 		if (t_cid < 0) {
+			cvm->t_cid = -1;
 			init_cvm_stack(cvm);
 		} else {
+			cvm->t_cid = t_cid;
 			printf("prepare to invoke tfork syscall, src_addr=%p, dst_addr=%p, len=%d\n", cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size);
 			if (tfork(cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size) == TFORK_FAILED) {
 				printf("tfork FAILED\n");

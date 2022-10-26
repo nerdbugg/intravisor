@@ -241,6 +241,7 @@ struct s_box {
 	unsigned long syscall_handler;
 	char libos[MAX_LIBOS_PATH];
 	uint64_t start_time;
+	int t_cid;
 };
 
 

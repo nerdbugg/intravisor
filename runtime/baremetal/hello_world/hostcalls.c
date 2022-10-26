@@ -13,6 +13,20 @@ int host_write(char *ptr, int size) {
 	return a0;
 }
 
+int host_inspect() {
+	int tmp = 114;
+	register long t5 __asm__("t5") = tmp;
+	register int a0 __asm__("a0") = 0;
+
+	__asm__ __volatile__(
+		"jal c_out"
+		: "=r"(a0)
+		: "r"(t5)
+	);
+
+	return a0;
+}
+
 void host_exit() {
 	int tmp = 13;
 	register long a0 __asm__("a0");

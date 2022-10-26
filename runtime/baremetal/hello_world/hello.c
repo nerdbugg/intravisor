@@ -13,6 +13,11 @@ void hello_c() {
 	buf[1] = 'j';
 	buf[2] = 'n';
 	// syscall_write(1, buf + 0x20000000, 3);
+	if (host_inspect()) {
+		host_write("I am a template!\n", 18);
+	} else {
+		host_write("I am not a template!\n", 22);
+	}
 
 	host_write(MSG, sizeof(MSG));
 
