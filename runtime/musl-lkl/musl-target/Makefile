@@ -66,7 +66,7 @@ EMPTY_LIB_NAMES = m rt pthread crypt util xnet resolv dl
 EMPTY_LIBS = $(EMPTY_LIB_NAMES:%=lib/lib%.a)
 CRT_LIBS = $(addprefix lib/,$(notdir $(CRT_OBJS)))
 STATIC_LIBS = lib/libc.a
-SHARED_LIBS = lib/libc.so
+SHARED_LIBS = lib/libc.so lib/libc_debug.so
 TOOL_LIBS = lib/musl-gcc.specs
 ALL_LIBS = $(CRT_LIBS) $(STATIC_LIBS) $(SHARED_LIBS) $(EMPTY_LIBS) $(TOOL_LIBS)
 ALL_TOOLS = obj/musl-gcc
@@ -130,7 +130,7 @@ $(NOSSP_OBJS) $(NOSSP_OBJS:%.o=%.lo): CFLAGS_ALL += $(CFLAGS_NOSSP)
 
 $(CRT_OBJS): CFLAGS_ALL += -DCRT
 
-$(LOBJS) $(LDSO_OBJS): CFLAGS_ALL += -fPIC
+$(LOBJS) $(LDSO_OBJS): CFLAGS_ALL += -fPIC -g3
 
 CC_CMD = $(CC) $(CFLAGS_ALL) -c -o $@ $<
 
@@ -162,6 +162,10 @@ obj/%.lo: $(srcdir)/%.c $(GENH) $(IMPH)
 lib/libc.so: $(LOBJS) $(LDSO_OBJS) ../build/lkl/lib/liblkl.a ../build/lkl_loader.a
 	$(CC) $(CFLAGS_ALL) $(LDFLAGS_ALL) -nostdlib -shared \
 	-Wl,-e,_dlstart_asm -o $@ $(LOBJS) $(LDSO_OBJS) $(LIBCC) ../build/lkl/lib/liblkl.a  ../build/lkl_loader.a
+
+lib/libc_debug.so: $(LOBJS) $(LDSO_OBJS) ../build/lkl/lib/liblkl.a ../build/lkl_loader.a
+	$(CC) $(CFLAGS_ALL) $(LDFLAGS_ALL) -nostdlib -shared \
+	-Wl,-e,_dlstart_asm -Wl,--image-base,0x20000000 -o $@ $(LOBJS) $(LDSO_OBJS) $(LIBCC) ../build/lkl/lib/liblkl.a  ../build/lkl_loader.a
 
 lib/libc.a: $(AOBJS) ../build/lkl/lib/liblkl.a ../build/lkl_loader.a
 	rm -f $@

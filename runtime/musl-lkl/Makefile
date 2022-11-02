@@ -79,6 +79,7 @@ musl-target-config:
 musl-target: ${LIBLKL} ${TARGET_LKL_MUSL_HEADERS}  musl-target-config target-lkl | ${TARGET_LKL_MUSL_BUILD}
 	+${MAKE} -C ${TARGET_LKL_MUSL} CFLAGS="$(MUSL_CFLAGS)" -j`tools/ncore.sh`
 	cp $(TARGET_LKL_MUSL)/lib/libc.so $(BUILD_DIR)/libmusl-lkl.so
+	cp $(TARGET_LKL_MUSL)/lib/libc_debug.so $(BUILD_DIR)/libmusl-lkl_debug.so
 
 target-lkl: musl-target-config 
 	make -C lkl_loader CC=${HOST_MUSL_CC}
