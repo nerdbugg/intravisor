@@ -1,6 +1,6 @@
 #MODE=sim
 
-CFLAGS=-I ../build/lkl/include -fPIC
+CFLAGS=-I ../build/lkl/include -fPIC -g
 
 CHERI_FLAGS = 
 
