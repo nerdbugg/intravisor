@@ -44,3 +44,15 @@ int host_cap_prb(char *key, void *location, long *size) {
 	__asm__ __volatile__("jal c_out" : "=r"(a0) : "r"(t5), "r"(a0), "r"(a1), "r"(a2) : "memory" );
 	return (int) a0; 
 }
+
+void host_save() {
+	// int status; // 假设默认是 0 
+	// if (status == 0) {
+		// status = 1;
+		int tmp = 115;
+		register long a0 __asm__("a0") = (void *)host_save;
+		register long t5 __asm__("t5") = tmp;
+		
+		__asm__ __volatile__("jal c_out" : "=r"(a0) : "r"(t5), "r"(a0) : "memory" );
+	// }
+}

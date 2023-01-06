@@ -296,6 +296,18 @@ static __inline__ void * getSP(void) {
     return sp;
 }
 
+static __inline__ void * getRA(void) {
+    register void * ra asm("ra");
+    asm ("" : "=r"(ra));
+    return ra;
+}
+
+static __inline__ void * getFP(void) {
+    register void * fp asm("s0");
+    asm ("" : "=r"(fp));
+    return fp;
+}
+
 static __inline__ void * getTP(void) {
     register void * tp asm("tp");
     asm ("" : "=r"(tp));

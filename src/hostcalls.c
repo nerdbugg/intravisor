@@ -1,4 +1,5 @@
 #include "monitor.h"
+#include "tfork.h"
 
 #define __asm_syscall(...) \
 	__asm__ __volatile__ ("ecall\n\t" \
@@ -19,6 +20,8 @@ static __inline__ void * getT5(void) {
     asm ("" : "=r"(t5));
     return t5;
 }
+
+// static __inline__ void * getSP
 
 int wrap_write(int fd, void *ptr, int size) {
 //	__syscall3(64, 1, (long )ptr, size);
@@ -493,8 +496,19 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 //INSPECT
 ////
 		case 114:
-			// TODO
 			ret = (ct->sbox->t_cid == -1);
+			break;
+///
+//SAVE
+/// 
+		case 115:
+			printf("save this cvm, cid=%d\n", sboxptr_to_cid(ct->sbox));
+			save(0, sboxptr_to_cid(ct->sbox), ct->sbox->threads);
+			return ret;
+///
+//RESTORE
+/// 
+		case 116:
 			break;
 ////
 //NETWORK

@@ -693,7 +693,15 @@ int cvm_worker(struct cvm *f) {
 	printf("BUILDING cvm: name=%s, disk=%s, runtime=%s, net=%s, args='%s', base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, cb_in = '%s', cb_out = '%s' wait = %ds\n", f->name, f->disk, f->runtime, f->net, f->args, f->isol.base, f->isol.size, f->isol.begin, f->isol.end, f->cb_in, f->cb_out, f->wait);
 	int cid = deploy_cvm(f);
 	printf("BUILDING cvm complete: cid=%d, disk=%s, runtime=%s, base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, syscall_handler = '%ld', ret_from_mon = '%ld'\n", cid, cvms[cid].disk_image, cvms[cid].libos, cvms[cid].base, cvms[cid].box_size, cvms[cid].cmp_begin, cvms[cid].cmp_end, cvms[cid].syscall_handler, cvms[cid].ret_from_mon);
-	init_thread(cid);
+	struct s_box *cvm = &cvms[cid];
+	if (cvm->t_cid < 2) {
+		// is template
+		init_thread(cid);
+	} else {
+		printf("load template, cid=%d, t_cid=%d\n", cid, cvm->t_cid);
+		load(cid);
+	}
+	
 }
 
 int init_cvm_stack(struct s_box *cvm) {

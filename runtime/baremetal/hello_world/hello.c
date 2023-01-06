@@ -18,7 +18,7 @@ void hello_c() {
 	} else {
 		host_write("I am not a template!\n", 22);
 	}
-
+	host_save();
 	host_write(MSG, sizeof(MSG));
 
 	host_cap_prb("test1", cap, &size);

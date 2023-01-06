@@ -1,4 +1,4 @@
-CHERI_SDK=/full/path/to/cheri/output/sdk
+CHERI_SDK=$(HOME)/cheri/output/sdk
 
 #MONITOR
 CC_MON = $(CHERI_SDK)/bin/clang
