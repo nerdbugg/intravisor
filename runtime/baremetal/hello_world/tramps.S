@@ -21,19 +21,11 @@ c_out:
 		sd	s4,  (8*4)(sp)
 		sd	s5,  (8*5)(sp)
 		sd	s6,  (8*6)(sp)
-
-#if 0
-//previosly, there was a bug in QEMU -- JAL produced global RA but not pc.base relative. remove this in future
-		cspecialr	cs2, ddc
-		cgetbase	t1, cs2
-
-		sub ra, ra, t1
-#endif
-
 		sd	ra,  (8*7)(sp)
 		sd	s0,  (8*8)(sp)
 
 tt:
+		// local_cap_store = the addr of global variable local_cap_store (in hostcalls.h) ;
 		auipc	t0, %pcrel_hi(local_cap_store)    // R_RISCV_PCREL_HI20
 		addi       t0, t0, %pcrel_lo(tt)
 		ld	t0, 0(t0)
@@ -42,12 +34,11 @@ tt:
 		lc	cs3, HC_PCC(t0) //hostcall code sealed
 		lc	cs4, MON_DDC(t0) //mon.ddc sealed
 
-
 		lc	ct1, RET_COMP_DDC(t0)
 		lc	ct0, RET_COMP_PPC(t0)
 
 		cmove	ct2, cs2
-		CInvoke cs3, cs4
+		CInvoke cs3, cs4 // cs3 -> src/asm.S: tp_write 
 
 
 .global ret_from_monitor

@@ -537,7 +537,8 @@ int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[]) {
 
 	// todo: cvm->disk_image, when running baremetal, disk_image is NULL;
 	struct c_thread *ct = cvm->threads;
- 	pthread_t cur_cid = ct->tid;
+ 	pthread_t cur_cid = pthread_self();
+	// printf("cur_cid = pthread_self(), tid=0x%x\n", cur_cid);
 	memcpy(ct, t_cvm->threads, sizeof(struct c_thread));
 	ct->tid = cur_cid;
 	for(int i=0; i<MAX_THREADS; i++) {
@@ -548,6 +549,9 @@ int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[]) {
 	ct[0].stack = (void *)((unsigned long)cvm->top - STACK_SIZE);
 	ct[0].argc = argc;
 	ct[0].argv = argv;
+
+	ct->m_tp = getTP();
+	ct->c_tp = (void *)(ct->stack+4096);
 
 	#ifdef __linux__
 //	int from = (cid - 2) * 2;
@@ -795,7 +799,13 @@ int main(int argc, char *argv[]) {
 			printf("tfork complete\n");
 		}
 
-		ret = pthread_attr_setstack(&ct->tattr, ct->stack, ct->stack_size);
+		// todo: maybe stack conflicts when exec load template.
+		if (t_cid < 0) {
+			ret = pthread_attr_setstack(&ct->tattr, ct->stack, ct->stack_size);
+		} else {
+			ret = pthread_attr_setstack(&ct->tattr, ct->stack, ct->stack_size);
+		}
+		
 		if(ret != 0) {
 			perror("pthread attr setstack");printf("ret = %d\n", ret); while(1);
 		}	

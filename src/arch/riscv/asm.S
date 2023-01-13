@@ -30,7 +30,8 @@ cinv:
 		jr a0
 
 #else
-
+		// a0 = local_cap_store //-> 0x2e001000
+		// a1 = struct cinv_s {void *__capability caps[10];} cinv_args;
 		mv	t0, a0
 		lc	ca2, (16*2)(a1)
 		sc	ca2, COMP_DDC(t0)	//compartment ddc
@@ -150,8 +151,8 @@ tp_write:
 .run_as_hyb:
 		cspecialr	cs6, ddc
 		cgetbase	s4, cs6
-        add     sp, sp, s4
-		cspecialw	ddc, ct6 //dcc-pcc should be the same 
+        add     sp, sp, s4   //e.g.: 0xfffffe0 -> 0x2fffffe0 
+		cspecialw	ddc, ct6 //dcc-pcc should be the same
 
 		j	.next
 
@@ -173,6 +174,7 @@ tp_write:
 		sc	ct1, -32(s0)	//reg_from_mod ignore
 		sc	ct2, -48(s0)	//comp ddc unsealed
 #else
+		// not exec 
 		sd	t0, -16(s0)
 		sd	t1, -32(s0)
 		sd	t2, -48(s0)

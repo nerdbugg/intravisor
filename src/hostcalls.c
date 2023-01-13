@@ -220,7 +220,7 @@ void destroy_carrie_thread(struct c_thread *ct) {
 		}
 	}
     pthread_mutex_unlock(&ct->sbox->ct_lock);
-	printf("something is wrong with the tread, check %p\n", tid);
+	printf("something is wrong with the thread, check %p. (may be wrong with sbox->ct->m_tp/c_tp ?)\n", tid);
 	while(1);
 }
 
