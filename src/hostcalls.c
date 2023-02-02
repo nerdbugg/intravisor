@@ -359,7 +359,7 @@ long create_carrie_timer(void *f, void *arg) {
 }
 
 
-struct c_tread *get_cur_thread() {
+struct c_thread *get_cur_thread() {
 	int cid = (long) getSP() / 0x10000000;
 	if ((cid <= 0 ) || (cid >= MAX_CVMS) ) {
 		printf("wrong cvm id %d, sp = %p, die\n", cid, (long) getSP()); while(1);

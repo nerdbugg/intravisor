@@ -18,17 +18,6 @@ int tfork(void *src_addr, void *dst_addr, int len)
     return syscall(tfork_syscall_num, src_addr, dst_addr, len);
 }
 
-// int checkpoint(void *src_addr, int len, char *filepath)
-// {
-//     // todo, no-tested
-//     int fd = open(filepath, O_RDWR + O_CREAT);
-//     for (unsigned int *src = src_addr; src < src_addr + len; ++src)
-//     {
-//         write(fd, src, sizeof(unsigned int));
-//     }
-//     close(fd);
-// }
-
 void save(int status, int cid, struct c_thread *threads)
 {
     void *cur_pc;
@@ -54,7 +43,7 @@ void save(int status, int cid, struct c_thread *threads)
 }
 
 void gen_caps_restored(struct s_box *cvm, struct cvm_tmplt_ctx *ctx, struct s_box *t_cvm) {
-    void *prev_s0 = (void *)(*(unsigned long long *)(ctx->s0 - 16) + 112);
+    void *prev_s0 = (void *)(*(uint64_t *)(ctx->s0 - 16) + 112);
     void *__capability *caps = prev_s0 - 3*sizeof(void *__capability);
     
     void *ret_comp_pc = cheri_getoffset(caps[2]);
@@ -73,9 +62,9 @@ void gen_caps_restored(struct s_box *cvm, struct cvm_tmplt_ctx *ctx, struct s_bo
             ;
     }
     void *__capability *local_cap_store = comp_to_mon(0xe001000, cvm);
-    void *__capability *comp_ddc = ((unsigned long long)local_cap_store) + 2 * sealcap_size;
-    void *__capability *sealed_pcc = ((unsigned long long)local_cap_store) + 11 * sealcap_size;
-    void *__capability *sealed_ddc = ((unsigned long long)local_cap_store) + 12 * sealcap_size;
+    void *__capability *comp_ddc = ((uint64_t)local_cap_store) + 2 * sealcap_size;
+    void *__capability *sealed_pcc = ((uint64_t)local_cap_store) + 11 * sealcap_size;
+    void *__capability *sealed_ddc = ((uint64_t)local_cap_store) + 12 * sealcap_size;
     *sealed_pcc = cheri_seal(ret_comp_pcc, sealcap);
     *sealed_ddc = cheri_seal(ret_comp_dcap, sealcap);
     *comp_ddc = datacap_create((void *) cvm->cmp_begin, (void *) cvm->cmp_end);
