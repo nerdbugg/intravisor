@@ -4,8 +4,8 @@
 #include <fcntl.h>
 #include <assert.h>
 
-#include <tfork.h>
-#include "../monitor.h"
+#include "monitor.h"
+#include "tfork.h"
 
 #define RET_COMP_PPC (16*11)
 #define RET_COMP_DDC (16*12)

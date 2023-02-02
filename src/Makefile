@@ -11,7 +11,7 @@ SRC_TFORK := tfork/tfork.c
 
 CFILES  := $(SRC_LKL)  $(SRC_LOADER) $(SRC_YAML) $(SRC_TFORK)
 ASFILES := arch/riscv/asm.S
-CFLAGS	:= -I lkl_wrap/include -I load_elf/ -I tfork/ -I lkl_wrap -I libyaml/include -Ilibyaml/src -DHAVE_CONFIG_H -Ilibyaml/
+CFLAGS	:= -I . -I lkl_wrap/include -I load_elf/ -I tfork/ -I lkl_wrap -I libyaml/include -Ilibyaml/src -DHAVE_CONFIG_H -Ilibyaml/
 
 target_c = ${OBJDIR}/$(patsubst %.c,%.o,$(notdir ${1})) 
 target_s = ${OBJDIR}/$(patsubst %.S,%.o,$(notdir ${1})) 
