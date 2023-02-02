@@ -1,6 +1,7 @@
 #include "monitor.h"
 #include "time.h"
 #include "assert.h"
+#include "tfork.h"
 
 struct s_box	cvms[MAX_CVMS];
 
@@ -553,7 +554,7 @@ int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[]) {
 	ct->m_tp = getTP();
 	ct->c_tp = (void *)(ct->stack+4096);
 
-	#ifdef __linux__
+#ifdef __linux__
 //	int from = (cid - 2) * 2;
 //	int to  = ((cid - 2) + 1) * 2;
 	int from = 0; int to = 4;
@@ -700,6 +701,7 @@ int cvm_worker(struct cvm *f) {
 	struct s_box *cvm = &cvms[cid];
 	if (cvm->t_cid < 2) {
 		// is template
+		// no template for current cvm, boot to template
 		init_thread(cid);
 	} else {
 		printf("load template, cid=%d, t_cid=%d\n", cid, cvm->t_cid);
@@ -782,6 +784,7 @@ int main(int argc, char *argv[]) {
 		cvm->cmp_begin = f->isol.begin;
 		cvm->cmp_end = f->isol.end;
 		cvm->box_size = f->isol.size;
+		// note: ct, an c_thread array pointer, is used as pointer to first element
 		ct->stack_size = (MAX_THREADS + 1) * STACK_SIZE;
 		ct->stack = cvm->cmp_end - ct->stack_size;
 		
@@ -791,12 +794,35 @@ int main(int argc, char *argv[]) {
 			init_cvm_stack(cvm);
 		} else {
 			cvm->t_cid = t_cid;
+#ifndef TFORK
+			printf("prepare restore memory layout using template snapshot\n");
+			map_entry* map_entry_list = cvm_map_entry_list[t_cid];
+			assert(map_entry_list!=NULL);
+			int fd = cvm_snapshot_fd[t_cid];
+			assert(fd>0);
+
+			unsigned long long file_offset = 0ll;
+			map_entry* p = map_entry_list;
+			while(p) {
+				unsigned long old_begin	= cvms[t_cid].cmp_begin;
+				unsigned long new_begin = cvm->cmp_begin;
+				size_t size = p->end - p->start;
+				unsigned long start = p->start - old_begin + new_begin;
+
+				void* res = mmap(start, size, p->prot, MAP_PRIVATE, fd, file_offset);
+				assert(res!=MAP_FAILED);
+
+				file_offset += size;
+				p = p->next;
+			}
+#else
 			printf("prepare to invoke tfork syscall, src_addr=%p, dst_addr=%p, len=%d\n", cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size);
 			if (tfork(cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size) == TFORK_FAILED) {
 				printf("tfork FAILED\n");
 				return 1;
 			}
 			printf("tfork complete\n");
+#endif
 		}
 
 		// todo: maybe stack conflicts when exec load template.

@@ -1,6 +1,8 @@
+#include <stdio.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <fcntl.h>
+#include <assert.h>
 
 #include <tfork.h>
 #include "../monitor.h"
@@ -12,6 +14,8 @@ const int TFORK_FAILED = MAP_FAILED;
 const static int tfork_syscall_num = 577;
 
 struct cvm_tmplt_ctx cvm_ctx[MAX_CVMS];
+map_entry* cvm_map_entry_list[MAX_CVMS];
+int cvm_snapshot_fd[MAX_CVMS];
 
 int tfork(void *src_addr, void *dst_addr, int len)
 {
@@ -29,6 +33,80 @@ int tfork(void *src_addr, void *dst_addr, int len)
 //     close(fd);
 // }
 
+
+unsigned int parse_permstr(char* perms)
+{
+    unsigned int res = 0;
+    if(perms[0] == 'r')
+        res |= PROT_READ;
+    if(perms[1] == 'w')
+        res |= PROT_WRITE;
+    if(perms[2] == 'x')
+        res |= PROT_EXEC;
+    return res;
+}
+
+map_entry* get_map_entry_list(int cid)
+{
+    FILE *map_file = fopen("/proc/curproc/map", "r");
+    assert(map_file != NULL);
+
+    map_entry *map_entry_list=NULL, *rear=NULL;
+
+    unsigned long range_low, range_high;
+    range_low   = cvms[cid].cmp_begin;
+    range_high  = cvms[cid].cmp_end;
+
+    unsigned long start, end;
+    int resident, privateresident;
+    void* obj;
+    char permstr[32] = "";
+
+    char map_buf[256];
+    while(fgets(map_buf, sizeof(map_buf), map_file)) {
+        int num = sscanf(map_buf, "0x%lx 0x%lx %d %d %p %31s",
+                         &start, &end,
+                         &resident, &privateresident,
+                         &obj, permstr);
+        assert(num == 6);
+
+        if(end-1 < range_low)
+            continue;
+        if(start >= range_high)
+            break;
+
+        int prot = parse_permstr(permstr);
+        map_entry *entry = (map_entry*)malloc(sizeof(map_entry));
+        entry->start= start;
+        entry->end  = end;
+        entry->prot = prot;
+        entry->next = NULL;
+
+        if(map_entry_list==NULL) {
+            map_entry_list = entry;
+        } else {
+            rear->next  = entry;
+        }
+        rear = entry;
+    }
+    fclose(map_file);
+    return map_entry_list;
+}
+
+void free_map_entry_list(map_entry *map_entry_list)
+{
+    if(map_entry_list==NULL) {
+        return;
+    }
+
+    map_entry *p = map_entry_list;
+    while(p) {
+        map_entry *temp=p;
+        p = p->next;
+        free(temp);
+    }
+}
+
 void save(int status, int cid, struct c_thread *threads)
 {
     void *cur_pc;
@@ -39,6 +117,28 @@ void save(int status, int cid, struct c_thread *threads)
         : "=r"(cur_sp), "=r"(cur_ra), "=r"(cur_s0));
     __asm__ __volatile__("auipc %0, 0"
                          : "=r"(cur_pc));
+
+#ifndef TFORK
+    // get memory layout of template memory region
+    map_entry* map_entry_list = get_map_entry_list(cid);
+    cvm_map_entry_list[cid] = map_entry_list;
+
+    // save memory memory content
+    int fd = memfd_create(cvms[cid].libos, 0);
+    cvm_snapshot_fd[cid] = fd;
+
+    unsigned long long file_offset = 0;
+    map_entry *p=map_entry_list;
+    while(p) {
+        size_t size = p->end - p->start;
+        void* res =mmap(p->start, size, p->prot, MAP_SHARED|MAP_FIXED, fd, file_offset);
+        assert(res != MAP_FAILED);
+
+        file_offset += size;
+        p = p->next;
+    }
+#endif
+
     // printf("save status = %d\n", status);
     if (status)
     {
