@@ -2,6 +2,7 @@
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include <assert.h>
 
 #include "monitor.h"
@@ -125,11 +126,25 @@ void save(int status, int cid, struct c_thread *threads)
 
     // save memory memory content
     int fd = memfd_create(cvms[cid].libos, 0);
+    // change file size according to cmp size
+    unsigned long cmp_begin = cvms[cid].cmp_begin;
+    unsigned long cmp_end = cvms[cid].cmp_end;
+    size_t cmp_size = cmp_end - cmp_begin;
+    // set the memfd size
+    ftruncate(fd, cmp_size);
     cvm_snapshot_fd[cid] = fd;
 
     unsigned long long file_offset = 0;
     map_entry *p=map_entry_list;
     while(p) {
+        // filter out unneeded section
+        if(p->end-1 < cmp_begin) {
+            p = p->next;
+            continue;
+        }
+        if(p->start >= cmp_end) {
+            break;
+        }
         size_t size = p->end - p->start;
         void* res =mmap(p->start, size, p->prot, MAP_SHARED|MAP_FIXED, fd, file_offset);
         assert(res != MAP_FAILED);
