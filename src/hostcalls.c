@@ -1,5 +1,5 @@
 #include "monitor.h"
-#include "tfork.h"
+// #include "tfork.h"
 
 #define __asm_syscall(...) \
 	__asm__ __volatile__ ("ecall\n\t" \
@@ -503,7 +503,16 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 /// 
 		case 115:
 			printf("save this cvm, cid=%d\n", sboxptr_to_cid(ct->sbox));
-			save(0, sboxptr_to_cid(ct->sbox), ct->sbox->threads);
+			pthread_t tid = pthread_self();
+			pthread_mutex_lock(&ct->sbox->ct_lock);
+		    struct c_thread *cur_ct;
+			for(int i = 0; i < MAX_THREADS; i++) {
+				if(ct[i].tid == tid) {
+					cur_ct = &ct[i];
+				}
+			}
+			pthread_mutex_unlock(&ct->sbox->ct_lock);
+			save_cur_thread_and_exit(sboxptr_to_cid(ct->sbox), cur_ct);
 			return ret;
 ///
 //RESTORE

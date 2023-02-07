@@ -1,5 +1,4 @@
 #include "../monitor.h"
-#include "../tfork/tfork.h"
 
 extern int TFORK_FAILED;
 
@@ -62,7 +61,7 @@ int cvm_worker(struct cvm *f)
     else
     {
         printf("load template, cid=%d, t_cid=%d\n", cid, cvm->t_cid);
-        load(cid);
+        load_all_thread(cid);
     }
 }
 
@@ -161,7 +160,13 @@ void create_and_start_cvm(struct cvm *f)
     {
         printf("pthread join, tid=%p, isol.base=%p\n", ct->tid, f->isol.base);
         void *cret;
-        pthread_join(ct->tid, &cret);
+        for (int i=0; true; i++) {
+            if (ct[i].tid == NULL) {
+                break;
+            }
+            pthread_join(ct[i].tid, &cret);
+            printf("cvm[%d]-thread[%d] has exited.\n", cid, i);
+        }
         printf("join returned\n");
     }
     else
