@@ -53,7 +53,7 @@ map_entry* get_map_entry_list(int cid)
     assert(map_file != NULL);
 
     map_entry *map_entry_list=NULL, *rear=NULL;
-
+ 
     unsigned long range_low, range_high;
     range_low   = cvms[cid].cmp_begin;
     range_high  = cvms[cid].cmp_end;
@@ -108,6 +108,16 @@ void free_map_entry_list(map_entry *map_entry_list)
     }
 }
 
+void print_map_entry_list(map_entry* map_entry_list)
+{
+    map_entry *p = map_entry_list;
+    printf("--DEBUG-- map_entry_list\n");
+    while(p) {
+        printf("%lx - %lx\n", p->start, p->end);
+        p = p->next;
+    }
+}
+
 void save(int status, int cid, struct c_thread *threads)
 {
     void *cur_pc;
@@ -124,6 +134,8 @@ void save(int status, int cid, struct c_thread *threads)
     map_entry* map_entry_list = get_map_entry_list(cid);
     cvm_map_entry_list[cid] = map_entry_list;
 
+    print_map_entry_list(map_entry_list);
+
     // save memory memory content
     int fd = memfd_create(cvms[cid].libos, 0);
     // change file size according to cmp size
@@ -136,20 +148,28 @@ void save(int status, int cid, struct c_thread *threads)
 
     unsigned long long file_offset = 0;
     map_entry *p=map_entry_list;
-    while(p) {
-        // filter out unneeded section
-        if(p->end-1 < cmp_begin) {
-            p = p->next;
-            continue;
-        }
-        if(p->start >= cmp_end) {
-            break;
-        }
+    while(p!=NULL) {
         size_t size = p->end - p->start;
-        void* res =mmap(p->start, size, p->prot, MAP_SHARED|MAP_FIXED, fd, file_offset);
+
+        volatile map_entry* temp = p;
+        printf("before %x \t", p);
+        printf("p->start = %x \t", p->start);
+        printf("&p = %x \t", &p);
+        printf("size = %lu \t", size);
+        printf("p->prot = %d \t", p->prot);
+        printf("fd = %d \t", fd);
+        printf("file_offset = %d \t", file_offset);
+
+        if(p->next == NULL) {
+            printf("hit here\n");
+        } 
+        void *res = mmap(p->start, size, p->prot, MAP_SHARED|MAP_FIXED, fd, file_offset);
+
         assert(res != MAP_FAILED);
+        printf("after %x\n", p);
 
         file_offset += size;
+        assert(p!=NULL);
         p = p->next;
     }
 #endif
