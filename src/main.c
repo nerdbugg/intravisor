@@ -801,7 +801,7 @@ int main(int argc, char *argv[]) {
 			int fd = cvm_snapshot_fd[t_cid];
 			assert(fd>0);
 
-			unsigned long long file_offset = 0ll;
+			unsigned long file_offset = 0l;
 			map_entry* p = map_entry_list;
 			while(p) {
 				unsigned long old_begin	= cvms[t_cid].cmp_begin;
@@ -815,6 +815,7 @@ int main(int argc, char *argv[]) {
 				file_offset += size;
 				p = p->next;
 			}
+			printf("complete snapshot restoration\n");
 #else
 			printf("prepare to invoke tfork syscall, src_addr=%p, dst_addr=%p, len=%d\n", cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size);
 			if (tfork(cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size) == TFORK_FAILED) {

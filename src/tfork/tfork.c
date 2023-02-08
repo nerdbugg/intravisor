@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
+#include <stdint.h>
+#include <string.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <assert.h>
@@ -134,7 +136,7 @@ void save(int status, int cid, struct c_thread *threads)
     map_entry* map_entry_list = get_map_entry_list(cid);
     cvm_map_entry_list[cid] = map_entry_list;
 
-    print_map_entry_list(map_entry_list);
+    //print_map_entry_list(map_entry_list);
 
     // save memory memory content
     int fd = memfd_create(cvms[cid].libos, 0);
@@ -146,32 +148,25 @@ void save(int status, int cid, struct c_thread *threads)
     ftruncate(fd, cmp_size);
     cvm_snapshot_fd[cid] = fd;
 
-    unsigned long long file_offset = 0;
+    // create mmap shared region
+    void* res = mmap(NULL, cmp_size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+    assert(res != MAP_FAILED);
+    printf("cmp_begin = 0x%lx, cmp_end = 0x%lx\n", cmp_begin, cmp_end);
+    printf("snapshot data memory region: %p - %p\n", res, res+cmp_size);
+
+    uint8_t* snapshot_data = res;
+    unsigned long offset = 0;
     map_entry *p=map_entry_list;
     while(p!=NULL) {
         size_t size = p->end - p->start;
 
-        volatile map_entry* temp = p;
-        printf("before %x \t", p);
-        printf("p->start = %x \t", p->start);
-        printf("&p = %x \t", &p);
-        printf("size = %lu \t", size);
-        printf("p->prot = %d \t", p->prot);
-        printf("fd = %d \t", fd);
-        printf("file_offset = %d \t", file_offset);
-
-        if(p->next == NULL) {
-            printf("hit here\n");
-        } 
-        void *res = mmap(p->start, size, p->prot, MAP_SHARED|MAP_FIXED, fd, file_offset);
-
-        assert(res != MAP_FAILED);
-        printf("after %x\n", p);
-
-        file_offset += size;
-        assert(p!=NULL);
+        memcpy(snapshot_data+offset, p->start, size);
+        
+        offset += size;
         p = p->next;
     }
+
+    assert(munmap(snapshot_data, cmp_size)==0);
 #endif
 
     // printf("save status = %d\n", status);
