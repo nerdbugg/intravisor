@@ -359,7 +359,7 @@ long create_carrie_timer(void *f, void *arg) {
 }
 
 
-struct c_tread *get_cur_thread() {
+struct c_thread *get_cur_thread() {
 	int cid = (long) getSP() / 0x10000000;
 	if ((cid <= 0 ) || (cid >= MAX_CVMS) ) {
 		printf("wrong cvm id %d, sp = %p, die\n", cid, (long) getSP()); while(1);
@@ -503,7 +503,16 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 /// 
 		case 115:
 			printf("save this cvm, cid=%d\n", sboxptr_to_cid(ct->sbox));
-			save(0, sboxptr_to_cid(ct->sbox), ct->sbox->threads);
+			pthread_t tid = pthread_self();
+			pthread_mutex_lock(&ct->sbox->ct_lock);
+		    struct c_thread *cur_ct;
+			for(int i = 0; i < MAX_THREADS; i++) {
+				if(ct[i].tid == tid) {
+					cur_ct = &ct[i];
+				}
+			}
+			pthread_mutex_unlock(&ct->sbox->ct_lock);
+			save_cur_thread_and_exit(sboxptr_to_cid(ct->sbox), cur_ct);
 			return ret;
 ///
 //RESTORE

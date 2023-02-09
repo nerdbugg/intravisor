@@ -10,13 +10,12 @@
 #include "monitor.h"
 #include "tfork.h"
 
-#define RET_COMP_PPC (16*11)
-#define RET_COMP_DDC (16*12)
+#define RET_COMP_PPC (16 * 11)
+#define RET_COMP_DDC (16 * 12)
 
 const int TFORK_FAILED = MAP_FAILED;
 const static int tfork_syscall_num = 577;
 
-struct cvm_tmplt_ctx cvm_ctx[MAX_CVMS];
 map_entry* cvm_map_entry_list[MAX_CVMS];
 int cvm_snapshot_fd[MAX_CVMS];
 
@@ -24,18 +23,6 @@ int tfork(void *src_addr, void *dst_addr, int len)
 {
     return syscall(tfork_syscall_num, src_addr, dst_addr, len);
 }
-
-// int checkpoint(void *src_addr, int len, char *filepath)
-// {
-//     // todo, no-tested
-//     int fd = open(filepath, O_RDWR + O_CREAT);
-//     for (unsigned int *src = src_addr; src < src_addr + len; ++src)
-//     {
-//         write(fd, src, sizeof(unsigned int));
-//     }
-//     close(fd);
-// }
-
 
 unsigned int parse_permstr(char* perms)
 {
@@ -96,40 +83,13 @@ map_entry* get_map_entry_list(int cid)
     return map_entry_list;
 }
 
-void free_map_entry_list(map_entry *map_entry_list)
+void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
 {
-    if(map_entry_list==NULL) {
-        return;
-    }
-
-    map_entry *p = map_entry_list;
-    while(p) {
-        map_entry *temp=p;
-        p = p->next;
-        free(temp);
-    }
-}
-
-void print_map_entry_list(map_entry* map_entry_list)
-{
-    map_entry *p = map_entry_list;
-    printf("--DEBUG-- map_entry_list\n");
-    while(p) {
-        printf("%lx - %lx\n", p->start, p->end);
-        p = p->next;
-    }
-}
-
-void save(int status, int cid, struct c_thread *threads)
-{
-    void *cur_pc;
     register void *cur_sp asm("sp");
     register void *cur_ra asm("ra");
     register void *cur_s0 asm("s0");
     asm(""
         : "=r"(cur_sp), "=r"(cur_ra), "=r"(cur_s0));
-    __asm__ __volatile__("auipc %0, 0"
-                         : "=r"(cur_pc));
 
 #ifndef TFORK
     // get memory layout of template memory region
@@ -168,32 +128,34 @@ void save(int status, int cid, struct c_thread *threads)
 
     assert(munmap(snapshot_data, cmp_size)==0);
 #endif
-
     // printf("save status = %d\n", status);
-    if (status)
-    {
-        return;
-    }
     // __asm__ __volatile__("sd sp, %0" :"=m" (cur_sp) :: "memory");
-    printf("sp is %x; ra is %x; pc is %x\n", cur_sp, cur_ra, cur_pc);
-    cvm_ctx[cid].pc = cur_pc + 4;
-    cvm_ctx[cid].sp = cur_sp;
-    cvm_ctx[cid].ra = cur_ra;
-    cvm_ctx[cid].s0 = cur_s0;
-    destroy_carrie_thread(threads);
+    printf("sp is %x; ra is %x;\n", cur_sp, cur_ra);
+    cur_thread->ctx.sp = cur_sp;
+    cur_thread->ctx.ra = cur_ra;
+    cur_thread->ctx.s0 = cur_s0;
+    destroy_carrie_thread(cur_thread->sbox->threads);
 }
 
-void gen_caps_restored(struct s_box *cvm, struct cvm_tmplt_ctx *ctx, struct s_box *t_cvm) {
-    void *prev_s0 = (void *)(*(unsigned long long *)(ctx->s0 - 16) + 112);
-    void *__capability *caps = prev_s0 - 3*sizeof(void *__capability);
+void gen_caps_restored(struct c_thread *target_thread)
+{
+    target_thread->m_tp = getTP();
+    target_thread->c_tp = (void *)(target_thread->stack + 4096);
     
+    struct s_box *cvm = target_thread->sbox;
+    struct cvm_tmplt_ctx *ctx = &target_thread->ctx;
+    struct s_box *t_cvm = &cvms[cvm->t_cid];
+
+    void *prev_s0 = (void *)(*(uint64_t *)(ctx->s0 - 16) + 112);
+    void *__capability *caps = prev_s0 - 3 * sizeof(void *__capability);
+
     void *ret_comp_pc = cheri_getoffset(caps[2]);
-    printf("ret_from_mon's address is 0x%x\n", ret_comp_pc);
+    printf("thread[tid=%x], ret_from_mon's address is 0x%x\n", target_thread->tid, ret_comp_pc);
     void *__capability ret_comp_pcc = codecap_create(cvm->cmp_begin, cvm->cmp_end);
     ret_comp_pcc = cheri_setaddress(ret_comp_pcc, comp_to_mon((unsigned long long)ret_comp_pc, cvm));
 
-    void * __capability ret_comp_dcap = datacap_create((void *) cvm->cmp_begin, (void *) cvm->cmp_end);
-	
+    void *__capability ret_comp_dcap = datacap_create((void *)cvm->cmp_begin, (void *)cvm->cmp_end);
+
     void *__capability sealcap;
     size_t sealcap_size = sizeof(sealcap);
     if (sysctlbyname("security.cheri.sealcap", &sealcap, &sealcap_size, NULL, 0) < 0)
@@ -203,29 +165,81 @@ void gen_caps_restored(struct s_box *cvm, struct cvm_tmplt_ctx *ctx, struct s_bo
             ;
     }
     void *__capability *local_cap_store = comp_to_mon(0xe001000, cvm);
-    void *__capability *comp_ddc = ((unsigned long long)local_cap_store) + 2 * sealcap_size;
-    void *__capability *sealed_pcc = ((unsigned long long)local_cap_store) + 11 * sealcap_size;
-    void *__capability *sealed_ddc = ((unsigned long long)local_cap_store) + 12 * sealcap_size;
+    void *__capability *comp_ddc = ((uint64_t)local_cap_store) + 2 * sealcap_size;
+    void *__capability *sealed_pcc = ((uint64_t)local_cap_store) + 11 * sealcap_size;
+    void *__capability *sealed_ddc = ((uint64_t)local_cap_store) + 12 * sealcap_size;
     *sealed_pcc = cheri_seal(ret_comp_pcc, sealcap);
     *sealed_ddc = cheri_seal(ret_comp_dcap, sealcap);
-    *comp_ddc = datacap_create((void *) cvm->cmp_begin, (void *) cvm->cmp_end);
+    *comp_ddc = datacap_create((void *)cvm->cmp_begin, (void *)cvm->cmp_end);
     prev_s0 = mon_to_comp(prev_s0, t_cvm);
 
-    __asm__ __volatile__ (
+    __asm__ __volatile__(
         "ld sp, %0;"
         "lc ct0, %1;"
         "lc ct1, %2;"
         "lc ct2, %3;"
         "cspecialw ddc, ct2;"
-        "CInvoke ct0, ct1;" :: "m"(prev_s0), "m"(*sealed_pcc), "m"(*sealed_ddc), "m"(*comp_ddc)
-    );
+        "CInvoke ct0, ct1;" ::"m"(prev_s0),
+        "m"(*sealed_pcc), "m"(*sealed_ddc), "m"(*comp_ddc));
 }
 
-void load(int cid)
+long load_sub_thread(struct c_thread *ct, struct c_thread *t_ct)
 {
-    struct c_thread *me = &cvms[cid].threads[0];
+    int ret = pthread_attr_init(&ct->tattr);
+    if (ret != 0)
+    {
+        perror("attr init");
+        printf("ret = %d\n", ret);
+        while (1)
+            ;
+    }
+
+    ret = pthread_attr_setstack(&ct->tattr, ct->stack, ct->stack_size);
+    if (ret != 0)
+    {
+        perror("pthread attr setstack");
+        printf("ret = %d\n", ret);
+    }
+
+#ifdef __linux__
+    ret = pthread_attr_setaffinity_np(&ct->tattr, sizeof(ct->sbox->cpuset), &ct->sbox->cpuset);
+    if (ret != 0)
+    {
+        perror("pthread set affinity");
+        printf("ret = %d\n", ret);
+    }
+#endif
+
+    ret = pthread_create(&ct->tid, &ct->tattr, gen_caps_restored, ct);
+    if (ret != 0)
+    {
+        perror("pthread create");
+        printf("ret = %d\n", ret);
+        while (1)
+            ;
+    }
+
+    return (long)ct->tid;
+}
+
+void load_all_thread(int cid)
+{
+    struct s_box *cvm = &cvms[cid];
+    struct c_thread *me = cvm->threads;
     int t_cid = me->sbox->t_cid;
-    struct c_thread *t_me = &cvms[t_cid].threads[0];
-    struct cvm_tmplt_ctx ctx = cvm_ctx[t_cid];
-    gen_caps_restored(me->sbox, &ctx, t_me->sbox);
+    struct c_thread *t_me = cvms[t_cid].threads;
+
+    for (int i = 1; i < 63; i++)
+    {
+        if (t_me[i].ctx.sp == NULL)
+        {
+            continue;
+        }
+        memcpy(&me[i], &t_me[i], sizeof(struct c_thread));
+        me[i].sbox = cvm;
+        printf("derived cvm has sub-thread, i=%d\n", i);
+        load_sub_thread(&me[i], &t_me[i]);
+    }
+
+    gen_caps_restored(me);
 }

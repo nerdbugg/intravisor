@@ -2,9 +2,9 @@
 #include "time.h"
 #include "assert.h"
 #include "tfork.h"
+#include "cvm/init.h"
 
 struct s_box	cvms[MAX_CVMS];
-
 
 //default config
 int timers = 0;
@@ -14,10 +14,9 @@ pthread_mutex_t print_lock;
 
 extern uint64_t starttime;
 // extern host_syscall_handler_adv(char *, void * __capability pcc, void * __capability ddc, void * __capability pcc2);
-extern host_syscall_handler_prb(char *name, void *, void *, void *);
+// extern host_syscall_handler_prb(char *name, void *, void *, void *);
 extern void tp_write();
 extern void ret_from_cinv2();
-extern int tfork(void *src_addr, void *des_addr, int len);
 
 extern const int TFORK_FAILED;
 
@@ -28,218 +27,6 @@ extern void cinv(void *, void *);
 #endif
 
 
-void *init_thread(int cid) {
-	struct c_thread *me = &cvms[cid].threads[0];
-	// assert(me->sbox != 0);
-	void *sp_read = me->stack + me->stack_size; //getSP(); = 0x2ff80000 + 524288 = 0x3000 0000 = cmp_end
-	char argv1[128];
-	char lc1[128];
-	char env1[128];
-	char env2[128];
-	char env3[128];
-	char env4[128];
-	char env5[128];
-
-	snprintf(argv1, 128, "/ld.so");
-	snprintf(lc1, 128, "LC_ALL=C.UTF-8");
-
-	snprintf(env1, 128, "PYTHONHOME=/usr");
-	snprintf(env2, 128, "PYTHONPATH=/usr");
-	snprintf(env3, 128, "PYTHONUSERBASE=site-packages");
-	snprintf(env4, 128, "TMPDIR=/tmp");
-	snprintf(env5, 128, "PYTHONDEBUG=3");
-//	snprintf(env5, 128, "_PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata");
-
-
-	me->m_tp = getTP();
-	me->c_tp = (void *)(me->stack+4096);
-
-	char *cenv = (char *) (sp_read - 4096*3); //originally, here was *2, but networking corrupts this memory
-	volatile unsigned long *sp = (sp_read -  4096*4);//I don't know why, but without volatile sp gets some wrong value after initing CENV in -O2
-
-	printf("target SP = %lx, old TP = %lx sp_read = %p, me->stacl = %p, getSP()=%p, me->c_tp = %p\n", sp, getTP(), sp_read, me->stack,getSP(), me->c_tp);
-	int cenv_size = 0;
-	// sp 是栈顶指针(位于低地址), 初始化栈按地址增长方向, 依次存放 argc, argv, envs 
-	sp[0] = me->argc;
-	sp[1] = (unsigned long) (mon_to_comp(argv1, me->sbox));
-	int i;
-	for(i = 1; i < me->argc; i++) {
-		printf("[%d] '%s'\n", i, me->argv[i]);
-
-		int tmp_add = snprintf(&cenv[cenv_size], 128, "%s\0", me->argv[i]);
-		if(cenv_size + tmp_add > 4096) {
-			printf("need more space for args on the stack, die\n"); while(1);
-		}
-		sp[i+1] = (unsigned long) (mon_to_comp(&cenv[cenv_size], me->sbox));
-		printf("sp[i+1] = '%s'\n", (char *) (comp_to_mon(sp[i+1], me->sbox)));
-		cenv_size += tmp_add + 1;
-	}
-	sp[i+1] = 0; //terminator
-	int ienv = i + 2;
-	printf("&env0 = %p, &env1=%p\n", &sp[ienv], &sp[ienv+1]);
-	sp[ienv++] = mon_to_comp(lc1, me->sbox);
-	sp[ienv++] = mon_to_comp(env1, me->sbox);
-	sp[ienv++] = mon_to_comp(env2, me->sbox);
-	sp[ienv++] = mon_to_comp(env3, me->sbox);
-	sp[ienv++] = mon_to_comp(env4, me->sbox);
-	sp[ienv++] = mon_to_comp(env5, me->sbox);
-	sp[ienv++] = 0;
-
-	size_t *auxv = &sp[ienv];
-	printf("%d sp = %p\n", __LINE__, sp);
-
-	if(strlen(me->sbox->disk_image)) {
-		me->sbox->lkl_disk.fd = open(me->sbox->disk_image, O_RDWR);
-		if(me->sbox->lkl_disk.fd < 0) {
-			printf("cannot open disk '%s'\n", me->sbox->disk_image); while(1);
-		}
-	} else
-		me->sbox->lkl_disk.fd = -1;
-
-	me->sbox->lkl_disk.ops = &lkl_dev_blk_ops;
-
-//	printf("LOADER: argv = %lx, envp = %lx(expected %lx), auxv = %lx \n", &sp[1], &sp[4], &sp[1 + 1 + sp[0]],auxv);
-//	printf("LOADER: argv = %s, envp = %s, \n", sp[1], sp[4]);
-	auxv[0] = AT_BASE;		auxv[1] = (unsigned long) me->sbox->base;
-	auxv[2] = AT_ENTRY;		auxv[3] = (unsigned long)  me->func;
-	auxv[4] = AT_PHDR;		auxv[5] = mon_to_comp(me->sbox->base, me->sbox) + 0x40;
-	auxv[6] = AT_PAGESZ;	auxv[7] = 4096;
-	auxv[8] = AT_IGNORE;	auxv[9] = -1;
-
-	int aid = 10;
-    auxv[aid++] = AT_CLKTCK;	auxv[aid++] = 100;
-    auxv[aid++] = AT_HWCAP;		auxv[aid++] = 0;
-    auxv[aid++] = AT_EGID;		auxv[aid++] = 0;
-    auxv[aid++] = AT_EUID;		auxv[aid++] = 0;
-    auxv[aid++] = AT_GID;		auxv[aid++] = 0;
-    auxv[aid++] = AT_SECURE;	auxv[aid++] = 0;
-    auxv[aid++] = AT_UID;		auxv[aid++] = -1;
-    auxv[aid++] = AT_RANDOM;	auxv[aid++] = 0;
-    auxv[aid++] = AT_NULL;		auxv[aid++] = 0;
-
-//    auxv[12]  = AT_EXECFN;	auxv[13]  = (size_t) "";
-//    auxv[22] = AT_PLATFORM;	auxv[23] = (size_t) "x86_64";
-//    auxv[28] = AT_RANDOM;	auxv[29] = getauxval(AT_RANDOM);
-//	auxv[aid++] = AT_HWCAP;		auxv[aid++] = getauxval(AT_HWCAP);
-
-
-//	if(mprotect(0x2fffd000, 4096, PROT_READ) == -1) {
-//		perror("mprotect");while(1);
-//	  }
-
-
-#if SIM
-#define CRTJMP(pc,sp) __asm__ __volatile__( \
-	"mv sp, %1 ; jr %0" : : "r"(pc), "r"(sp): "memory" )
-
-	printf("SIM: sp = %p, tp = %p\n", sp, me->c_tp);
-	printf("-----------------------------------------------\n");
-	__asm__ __volatile__("mv sp, %0; mv tp, %1;" :: "r"(sp), "r"(me->c_tp) : "memory");
-	cinv(
-		  me->func,  	//entrance
-		  NULL,  	//entrance
-		  NULL, 			//compartment data cap
-		  me->hostcall,	//cap for exit
-		  NULL,	//cap for example
-		  NULL, //default data cap after exit, must be changed
-		  me->sbox->ret_from_mon + me->sbox->base,
-		  auxv[1] /* AT_BASE */ + 0x0e000000 + 0x1000 //local_cap_store
-		);
-
-	printf("%s:%d\tBUG, die\n",__func__, __LINE__); while(1);
-
-#else
-
-/////////////////////////
-  void * __capability sealed_codecap	= me->sbox->box_caps.sealed_codecap;
-  void * __capability sealed_datacap	= me->sbox->box_caps.sealed_datacap;
-  void * __capability dcap				= me->sbox->box_caps.dcap;     
-  void * __capability sealed_codecapt	= me->sbox->box_caps.sealed_codecapt;
-  void * __capability sealed_codecapt2	= me->sbox->box_caps.sealed_codecapt2;
-  void * __capability sealed_datacapt	= me->sbox->box_caps.sealed_datacapt;
-  void * __capability sealed_ret_from_mon	= me->sbox->box_caps.sealed_ret_from_mon;
-
-	struct cinv_s {
-		void *__capability caps[10];
-	} cinv_args;
-//
-	cinv_args.caps[0] = sealed_codecap;
-	printf("ca0: sealed COMP PPC\n");
-	CHERI_CAP_PRINT(cinv_args.caps[0]);
-//
-	cinv_args.caps[1] = sealed_datacap;
-	printf("ca1: sealed COMP DDC\n");
-	CHERI_CAP_PRINT(cinv_args.caps[1]);
-//
-	cinv_args.caps[2] = dcap;
-	printf("ca2: COMP DDC\n");
-	CHERI_CAP_PRINT(cinv_args.caps[2]);
-//
-	cinv_args.caps[3] = sealed_codecapt;
-	printf("ca3: sealed HC PCC\n");
-	CHERI_CAP_PRINT(cinv_args.caps[3]);
-//
-	cinv_args.caps[4] = sealed_datacapt;
-	printf("ca4: sealed HC DDC (mon.DDC)\n");
-	CHERI_CAP_PRINT(cinv_args.caps[4]);
-//
-	cinv_args.caps[5] = sealed_codecapt2;
-	printf("ca5: sealed OCALL PCC \n");
-	CHERI_CAP_PRINT(cinv_args.caps[5]);
-//
-	cinv_args.caps[6] = sealed_ret_from_mon;
-	printf("ca6: sealed ret from mon\n");
-	CHERI_CAP_PRINT(cinv_args.caps[6]);
-//
-
-	if(me->sbox->pure) {
-
-//TOD: this is very unreliable. we need to use precise bottom of the stack here
-		void * __capability sp_cap = datacap_create((void *) ((unsigned long) sp - STACK_SIZE + 4096*4), (void *) sp);
-		sp_cap = cheri_setaddress(sp_cap, sp);
-
-//
-		cinv_args.caps[7] = sp_cap;
-		printf("ca7: SP cap for purecap cVMs\n");
-		CHERI_CAP_PRINT(cinv_args.caps[7]);
-//
-	}
-	//           x2fffc000
-	sp = mon_to_comp(sp, me->sbox);
-	// sp = 0xfffc000
-	//                      0x2ff81000
-	me->c_tp = mon_to_comp(me->c_tp, me->sbox);
-	// me->c_tp = 0xff81000
-	printf("[%3d ms]: finish init_thread\n", gettime());
-	printf("HW: sp = %p, tp = %p\n", sp, me->c_tp);
-	printf("-----------------------------------------------\n");
-	__asm__ __volatile__("mv sp, %0;" :: "r"(sp) : "memory");
-	__asm__ __volatile__("mv tp, %0;" :: "r"(me->c_tp) : "memory");
-	// checkpoint(0x20000000, 0x10000000, "/tmp/checkpoint1");
-	cinv(
-#if 0
-		  sealed_codecap,  	//ca0:	entrance
-		  sealed_datacap,  	//ca1:	entrance
-		  dcap, 			//ca2:	compartment data cap
-///
-		  sealed_codecapt,	//ca3:	cap for hostcalls
-		  sealed_datacapt,	//ca4:	cap for hostcall, in fact -- sealed mon.DDC
-///
-		  sp_cap,
-//		  sealed_codecapt2,	//ca5:	cap for ret from CINV2 (OCALL)
-///
-		  sealed_ret_from_mon, //ca6:	because compartment cannot create CAPS, this cap is created by MON prior calling
-		  auxv[1] /* AT_BASE */ + 0x0e000000 + 0x1000 //local_cap_store
-#else
-		  auxv[1] /* AT_BASE */ + 0x0e000000 + 0x1000, //local_cap_store  //-> 0x2e001000
-		  &cinv_args
-#endif
-		);
-
-
-	while(1);
-#endif
-}
 
 void sig_handler(int j, siginfo_t *si, void *uap) {
 	mcontext_t *mctx = &((ucontext_t *)uap)->uc_mcontext;
@@ -310,118 +97,6 @@ void setup_sig() {
 }
 
 
-int build_cvm(int cid, struct cmp_s *comp, char *libos, char *disk, int argc, char *argv[], char *cb_out, char *cb_in) {
-	struct encl_map_info encl_map;
-	void *base = comp->base;
-	unsigned long size = comp->size;
-	unsigned long cmp_begin = comp->begin;
-	unsigned long cmp_end = comp->end;
-
-	memset(&encl_map, 0, sizeof(struct encl_map_info));
-
-	load_elf(libos, base, &encl_map);
-	if (encl_map.base < 0) {
-		printf("Could not load '%s', die\n", libos); while(1);
-	}
-
-	if(encl_map.base != (unsigned long) base) {
-		printf("mapped at wrong addres [%p]:[%p], die\n", encl_map.base, base); while(1);
-	}
-
-	printf("ELF BASE = %p, MAP SIZE = %lx, ENTRY = %p\n", encl_map.base, encl_map.size, encl_map.entry_point);
-
-	int ret = 0;
-
-	if(encl_map.entry_point == 0) {
-		printf("entry_point is 0, runtime image is wrong/corrupted\n"); while(1);
-	} else printf("encl_map.entry = %p\n",encl_map.entry_point);
-
-	if(encl_map.ret_point == 0) {
-		printf("ret_from_monitor is 0, runtime image is wrong/corrupted\n"); while(1);
-	}else printf("encl_map.ret = %p\n",encl_map.ret_point);
-
-
-	if(encl_map.cap_relocs) {
-		printf("we have __cap_relocs, it is a purecap binary\n");
-		cvms[cid].pure = 1;
-		struct cap_relocs_s *cr = (struct cap_relocs_s *) encl_map.cap_relocs;
-		for(int j = 0; j < encl_map.cap_relocs_size / sizeof(struct cap_relocs_s); j++) {
-			printf("TODO: create cap: %p Base: %p Length: %ld Perms: %lx Unk = %ld\n", comp->base + cr[j].dst, cr[j].addr, cr[j].len, cr[j].perms, cr[j].unknown);
-			void * __capability rel_cap;
-			if(cr[j].perms == 0x8000000000000000ll) {
-#if 0
-//there is a problem when I call an asm function. the caller cap doesn't have a proper size.
-//so I just make all call caps PCC-size (see the else)
-				rel_cap = pure_codecap_create((void *) comp->base,(void *)  comp->base + cr[j].addr + cr[j].len);
-				rel_cap = cheri_setaddress(rel_cap, comp->base + cr[j].addr);
-#else
-				rel_cap = pure_codecap_create((void *) comp->base,(void *)  comp->base + comp->size);
-				rel_cap = cheri_setaddress(rel_cap, comp->base + cr[j].addr);
-#endif
-			} else {
-//TODO: we need something better
-				if (cr[j].len == 0xabba) {
-					printf("replace cap for caps\n");
-					rel_cap = datacap_create((void *) comp->base + 0xe001000, comp->base + 0xe002000);
-				} else
-					rel_cap = datacap_create((void *) comp->base + cr[j].addr,(void *)  comp->base + cr[j].addr + cr[j].len);
-			}
-			printf("store REL_CAP\n");
-			CHERI_CAP_PRINT(rel_cap);
-			st_cap(cr[j].dst + comp->base, rel_cap);
-			}
-	}
-
-	cvms[cid].base = encl_map.base;
-	cvms[cid].top = (void *) ((unsigned long) base + size);
-	cvms[cid].box_size = encl_map.size;
-	cvms[cid].entry = encl_map.entry_point;
-	cvms[cid].stack_size = (MAX_THREADS + 1) * STACK_SIZE; // last thread -- store for caps 
-
-	cvms[cid].ret_from_mon = encl_map.ret_point;
-	cvms[cid].syscall_handler = encl_map.syscall_handler;
-	memset(cvms[cid].libos, 0, MAX_LIBOS_PATH);
-	strcpy(cvms[cid].libos, libos);
-
-	
-//	printf("cvms.base = %p, cvms.box_size = %lx\n", cvms[cid].base, cvms[cid].box_size);
-
-	cvms[cid].cmp_begin = cmp_begin;
-	cvms[cid].cmp_end = cmp_end;
-
-#if 0
-	cvms[cid].fd = create_console(cid);
-#else
-	cvms[cid].fd = STDOUT_FILENO;
-#endif
-	if(disk)
-		strncpy(cvms[cid].disk_image, disk, sizeof(cvms[cid].disk_image));
-
-	struct c_thread *ct = cvms[cid].threads;
-////////////////////
-	for(int i = 0; i < MAX_THREADS; i++) {
-		ct[i].id = -1;
-		ct[i].sbox = &cvms[cid];
-	}
-
-	ct[0].id = 0;
-	ct[0].func = encl_map.entry_point;
-	ct[0].cb_in = cb_in;
-	ct[0].cb_out = cb_out;
-	ct[0].stack_size = STACK_SIZE;
-	ct[0].stack = (void *)((unsigned long)cvms[cid].top - STACK_SIZE);
-	ct[0].arg = NULL;
-	ct[0].sbox = &cvms[cid];
-
-	ct[0].argc = argc;
-	ct[0].argv = argv;
-
-	/*** gen caps ***/
-	//do we really need to save the sealcap?
-	gen_caps(&cvms[cid], &ct[0]);
-	return 0;
-}
-
 
 void parse_cmdline(char *argv[], const char *disk_img, const char *runtime_so, char **yaml_cfg, int *skip_argc) {
 	for (++argv; *argv; ++argv)
@@ -464,123 +139,6 @@ void parse_cmdline(char *argv[], const char *disk_img, const char *runtime_so, c
 			  break; //argv now points to the beginning of args
 		}
 	}
-}
-
-int gen_caps(struct s_box *cvm, struct c_thread *ct) {
-	ct->sbox->box_caps.sealcap_size = sizeof(ct->sbox->box_caps.sealcap);
-	if (sysctlbyname("security.cheri.sealcap", &ct->sbox->box_caps.sealcap, &ct->sbox->box_caps.sealcap_size, NULL, 0) < 0) {
-		printf("sysctlbyname(security.cheri.sealcap)\n");while(1);
-	}
-	// assert(ct->sbox == cvm);
-	void * __capability ccap;
-	if(cvm->pure)
-		ccap = pure_codecap_create((void *) ct->sbox->cmp_begin, (void *) ct->sbox->cmp_end);
-	else
-		//                                  0x20000000                 0x30000000
-		ccap = codecap_create((void *) ct->sbox->cmp_begin, (void *) ct->sbox->cmp_end);
-		// ccap = 0x20000000
-
-	void * __capability dcap = datacap_create((void *) ct->sbox->cmp_begin, (void *) ct->sbox->cmp_end);
-	// dcap = 0x20000000
-	ct->sbox->box_caps.dcap = dcap;
-
-	ccap = cheri_setaddress(ccap, (unsigned long) (ct->func) + (unsigned long)(ct->sbox->base));
-	// ccap = 0x200012c4
-	ct->sbox->box_caps.sealed_datacap = cheri_seal(dcap, ct->sbox->box_caps.sealcap);
-	// ddc = 0x53d20
-	ct->sbox->box_caps.sealed_codecap = cheri_seal(ccap, ct->sbox->box_caps.sealcap);
-	// ppc = 0x53d00
-	// assert(ct->sbox == cvm);
-	//probe capabilitites for syscall/hostcall. 
-	if(ct->cb_out == NULL) {
-		printf("callback_out is empty, use default 'monitor'\n");
-		ct->cb_out = "monitor";
-	}
-	host_syscall_handler_prb(ct->cb_out, &ct->sbox->box_caps.sealed_codecapt, &ct->sbox->box_caps.sealed_datacapt, &ct->sbox->box_caps.sealed_codecapt2);
-
-	//generate capabilitites for ret_from_mon. TODO: we should make them public and our syscall/hostcall should fetch them
-	//todo: we need something better than comp_to_mon_force
-	ccap = cheri_setaddress(ccap, comp_to_mon_force(ct->sbox->ret_from_mon + ct->sbox->base - ct->sbox->cmp_begin, (unsigned long) ct->sbox) ); //here should be base but not cmp_begin. 
-	// ccap = 0x20001390
-	ct->sbox->box_caps.sealed_ret_from_mon = cheri_seal(ccap, ct->sbox->box_caps.sealcap);
-	// 0x1071ffff80120040000000020001390
-
-	//if we have syscall handler, we should publish it. TODO: let's init thread pubs this handler?
-	if(cvm->syscall_handler != 0) {
-		printf("ACHTUNG: '%s' has syscall handler 'syscall_handler' at %p\n", cvm->libos, cvm->syscall_handler);
-		void * __capability syscall_pcc_cap = cheri_setaddress(ccap, (unsigned long) comp_to_mon_force(cvm->syscall_handler + ct->sbox->base - ct->sbox->cmp_begin, (unsigned long) ct->sbox));
-		void * __capability sealed_syscall_pcc_cap = cheri_seal(syscall_pcc_cap, ct->sbox->box_caps.sealcap);
-
-		host_syscall_handler_adv(cvm->libos, sealed_syscall_pcc_cap, ct->sbox->box_caps.sealed_datacap);
-	}
-	// assert(ct->sbox == cvm);
-}
-
-int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[]) {
-	struct s_box *t_cvm = &cvms[t_cid];
-	struct s_box *cvm = &cvms[cid];
-	
-	cvm->base = cmp->base;
-	cvm->top = (void *) ((unsigned long) cmp->base + cmp->size);
-	// memcpy(&cvm->box_caps, &t_cvm->box_caps, sizeof(struct box_caps_s));
-	cvm->entry = t_cvm->entry;
-	cvm->ret_from_mon = t_cvm->ret_from_mon;
-	strcpy(cvm->disk_image, t_cvm->disk_image);
-	cvm->fd = t_cvm->fd;
-	cvm->pure = t_cvm->pure;
-	cvm->syscall_handler = t_cvm->syscall_handler;
-	strcpy(cvm->libos, t_cvm->libos);
-
-	if (pthread_mutex_init(&cvms[cid].ct_lock, NULL) != 0) {
-		printf("\n mutex init failed\n");
-		return 1;
-	}
-
-	// todo: cvm->disk_image, when running baremetal, disk_image is NULL;
-	struct c_thread *ct = cvm->threads;
- 	pthread_t cur_cid = pthread_self();
-	// printf("cur_cid = pthread_self(), tid=0x%x\n", cur_cid);
-	memcpy(ct, t_cvm->threads, sizeof(struct c_thread));
-	ct->tid = cur_cid;
-	for(int i=0; i<MAX_THREADS; i++) {
-		ct[i].id = -1;
-		ct[i].sbox = cvm;
-	}
-	
-	ct[0].stack = (void *)((unsigned long)cvm->top - STACK_SIZE);
-	ct[0].argc = argc;
-	ct[0].argv = argv;
-
-	ct->m_tp = getTP();
-	ct->c_tp = (void *)(ct->stack+4096);
-
-#ifdef __linux__
-//	int from = (cid - 2) * 2;
-//	int to  = ((cid - 2) + 1) * 2;
-	int from = 0; int to = 4;
-	CPU_ZERO(&cvms[cid].cpuset);
-	for (int j = from; j < to; j++)
-               CPU_SET(j, &cvms[cid].cpuset);
-
-	int ret = pthread_attr_setaffinity_np(&ct[0].tattr, sizeof(cvms[cid].cpuset), &cvms[cid].cpuset);
-	if (ret != 0) {
-		perror("pthread set affinity");printf("ret = %d\n", ret);
-	}
-
-#endif
-	gen_caps(cvm, ct);
-}
-
-int find_template(int cid, char *libos) {
-	if (cid == 2) {
-		return -1;
-	}
-	for (int i = 0; i < MAX_CVMS; i++) {
-		if (strcmp(libos, cvms[i].libos) == 0) {
-			return i;
-		}
-	}
-	return -1;
 }
 
 int monitor_init() {
@@ -638,44 +196,6 @@ int build_capfile(struct capfile *f) {
 	host_cap_file_adv(ptr, f->size, f->name);
 }
 
-int deploy_cvm(struct cvm *f) {
-	int cid = f->isol.base / 0x10000000;
-
-	enum { kMaxArgs = 16 };
-	int c_argc = 0;
-	long *c_argv = malloc(kMaxArgs*sizeof(long));
-
-	char *p2 = strtok(f->args, " ");
-	while (p2 && c_argc < kMaxArgs-1) {
-		c_argv[c_argc++] = p2;
-		p2 = strtok(0, " ");
-	}
-	c_argv[c_argc] = 0;
-	struct cmp_s comp;
-	comp.base = f->isol.base;		/* base addr */
-	comp.size = f->isol.size;		/* size */
-	comp.begin = f->isol.begin;		/* cmp_begin */
-	comp.end = f->isol.end;			/* cmp_end  */
-	int t_cid = cvms[cid].t_cid;
-	if (t_cid < 0) {
-		//todo: sanitise base addresses, check cvms/sbox max number
-		build_cvm(cid, //so far it is the best I can offer. 
-			&comp,
-			f->runtime, 	/* libOS+init */
-			f->disk,		/* user disk */
-			c_argc,
-			c_argv,
-			f->cb_out,
-			f->cb_in
-		);
-	}
-	else {
-		fork_cvm(cid, t_cid, &comp, c_argc, c_argv);
-	}
-	// assert(cvms[cid].threads[0].sbox != 0);
-	return cid;
-}
-
 int link_cvm(struct cvm *flist) {
 	for (struct cvm *f = flist; f; f = f->next) {
 		if(!f->cb_in) {
@@ -691,39 +211,6 @@ int link_cvm(struct cvm *flist) {
 			}
 		}
 	}
-}
-
-int cvm_worker(struct cvm *f) {
-	printf("***************** Deploy '%s' ***************\n", f->name);
-	printf("BUILDING cvm: name=%s, disk=%s, runtime=%s, net=%s, args='%s', base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, cb_in = '%s', cb_out = '%s' wait = %ds\n", f->name, f->disk, f->runtime, f->net, f->args, f->isol.base, f->isol.size, f->isol.begin, f->isol.end, f->cb_in, f->cb_out, f->wait);
-	int cid = deploy_cvm(f);
-	printf("BUILDING cvm complete: cid=%d, disk=%s, runtime=%s, base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, syscall_handler = '%ld', ret_from_mon = '%ld'\n", cid, cvms[cid].disk_image, cvms[cid].libos, cvms[cid].base, cvms[cid].box_size, cvms[cid].cmp_begin, cvms[cid].cmp_end, cvms[cid].syscall_handler, cvms[cid].ret_from_mon);
-	struct s_box *cvm = &cvms[cid];
-	if (cvm->t_cid < 2) {
-		// is template
-		// no template for current cvm, boot to template
-		init_thread(cid);
-	} else {
-		printf("load template, cid=%d, t_cid=%d\n", cid, cvm->t_cid);
-		load(cid);
-	}
-	
-}
-
-int init_cvm_stack(struct s_box *cvm) {
-	struct c_thread *ct = &cvm->threads[0];
-	int ret = mmap(ct->stack, ct->stack_size, PROT_READ | PROT_WRITE , MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
-	if (ret == MAP_FAILED) {
-		perror("mmap");
-		return 1;
-	} else
-		printf("[cVM STACKs] = [%p -- %lx]\n", ct->stack, (unsigned long) ct->stack + ct->stack_size);
-
-	memset(ct->stack, 0, ct->stack_size);
-
-	place_canaries(ct->stack, ct->stack_size, 0xabbacaca);
-	check_canaries(ct->stack, ct->stack_size, 0xabbacaca);
-	return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -760,103 +247,15 @@ int main(int argc, char *argv[]) {
 
 	// printf("***************** Link Inner<-->Outer ***************\n");
 	// link_cvm(state->flist);
-
-	void *cret;
 	
 	for (struct cvm *f = state->flist; f; f = f->next) {
-		int cid = f->isol.base / 0x10000000;
-		printf("Deploy cthread of cvm, cid=%d\n", cid);
-		struct s_box *cvm = &cvms[cid];
-		struct c_thread *ct = cvm->threads;
-
-		cvm->start_time = get_ms_timestamp();
-
-		if (pthread_mutex_init(& cvm->ct_lock, NULL) != 0) {
-			printf("\n mutex init failed\n");
-			return 1;
-		}
-		int ret;
-		ret = pthread_attr_init(&ct->tattr);
-		if(ret != 0) {
-			perror("attr init");printf("ret = %d\n", ret); while(1);
-		}
-
-		cvm->cmp_begin = f->isol.begin;
-		cvm->cmp_end = f->isol.end;
-		cvm->box_size = f->isol.size;
-		// note: ct, an c_thread array pointer, is used as pointer to first element
-		ct->stack_size = (MAX_THREADS + 1) * STACK_SIZE;
-		ct->stack = cvm->cmp_end - ct->stack_size;
-		
-		int t_cid = find_template(cid, f->runtime);
-		if (t_cid < 0) {
-			cvm->t_cid = -1;
-			init_cvm_stack(cvm);
-		} else {
-			cvm->t_cid = t_cid;
-#ifndef TFORK
-			printf("prepare restore memory layout using template snapshot\n");
-			map_entry* map_entry_list = cvm_map_entry_list[t_cid];
-			assert(map_entry_list!=NULL);
-			int fd = cvm_snapshot_fd[t_cid];
-			assert(fd>0);
-
-			unsigned long file_offset = 0l;
-			map_entry* p = map_entry_list;
-			while(p) {
-				unsigned long old_begin	= cvms[t_cid].cmp_begin;
-				unsigned long new_begin = cvm->cmp_begin;
-				size_t size = p->end - p->start;
-				unsigned long start = p->start - old_begin + new_begin;
-
-				void* res = mmap(start, size, p->prot, MAP_PRIVATE, fd, file_offset);
-				assert(res!=MAP_FAILED);
-
-				file_offset += size;
-				p = p->next;
-			}
-			printf("complete snapshot restoration\n");
-#else
-			printf("prepare to invoke tfork syscall, src_addr=%p, dst_addr=%p, len=%d\n", cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size);
-			if (tfork(cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size) == TFORK_FAILED) {
-				printf("tfork FAILED\n");
-				return 1;
-			}
-			printf("tfork complete\n");
-#endif
-		}
-
-		// todo: maybe stack conflicts when exec load template.
-		if (t_cid < 0) {
-			ret = pthread_attr_setstack(&ct->tattr, ct->stack, ct->stack_size);
-		} else {
-			ret = pthread_attr_setstack(&ct->tattr, ct->stack, ct->stack_size);
-		}
-		
-		if(ret != 0) {
-			perror("pthread attr setstack");printf("ret = %d\n", ret); while(1);
-		}	
-
-		ret = pthread_create(&ct->tid, &ct->tattr, cvm_worker, f);
-		printf("pthread_create ret = %d\n", ret);
-		if(ret != 0) {
-			perror("pthread_create"); 
-			// exit(1);
-		}
-
-		printf("f->wait=%d\n", f->wait);
-		if(f->wait == -1) {
-			printf("pthread join, tid=%d, isol.base=%p\n", ct->tid, f->isol.base);
-			pthread_join(ct->tid, &cret);
-			printf("join returned\n");
-		}
-		else
-			sleep(f->wait);
+		create_and_start_cvm(f);
 	}
 	
 	// wait completion
 	for (int i = 0; i < MAX_CVMS; i++) {
 		struct c_thread *ct = cvms[i].threads;
+		void *cret;
 		pthread_join(ct[0].tid, &cret);
 	}
 	printf("all cvm exit, monitor exit.\n");

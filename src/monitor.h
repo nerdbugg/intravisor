@@ -53,6 +53,7 @@
 #include <stdbool.h>
 
 #include "intravisor.h"
+#include "tfork.h"
 
 #define AT_NULL		0
 #define AT_IGNORE	1
@@ -182,7 +183,7 @@ struct c_thread {
 	struct s_box *sbox;
 
 	struct stream_caps_store *cs;
-
+	struct cvm_tmplt_ctx ctx;
 };
 
 struct cs_lock {
