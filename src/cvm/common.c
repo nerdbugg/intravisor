@@ -147,7 +147,7 @@ void create_and_start_cvm(struct cvm *f)
 			printf("prepare to invoke tfork syscall, src_addr=%p, dst_addr=%p, len=%d\n", cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size);
 			if (tfork(cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size) == TFORK_FAILED) {
 				printf("tfork FAILED\n");
-				return 1;
+				exit(1);
 			}
 			printf("tfork complete\n");
 #endif

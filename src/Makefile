@@ -14,7 +14,7 @@ CFILES  := $(SRC_LKL)  $(SRC_LOADER) $(SRC_YAML) $(SRC_TFORK) $(SRC_CVM)
 ASFILES := arch/riscv/asm.S
 CFLAGS	:= -I . -I lkl_wrap/include -I load_elf/ -I tfork/ -I lkl_wrap -I libyaml/include -Ilibyaml/src -DHAVE_CONFIG_H -Ilibyaml/
 
-ifdef tfork
+ifdef TFORK
   CFLAGS += -DTFORK
 endif
 
