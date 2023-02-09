@@ -1,4 +1,5 @@
-#include "../monitor.h"
+#include "monitor.h"
+#include <assert.h>
 
 extern int TFORK_FAILED;
 
@@ -120,13 +121,37 @@ void create_and_start_cvm(struct cvm *f)
     else
     {
         cvm->t_cid = t_cid;
-        printf("prepare to invoke tfork syscall, src_addr=%p, dst_addr=%p, len=%d\n", cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size);
-        if (tfork(cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size) == TFORK_FAILED)
-        {
-            printf("tfork FAILED\n");
-            exit(1);
-        }
-        printf("tfork complete\n");
+#ifndef TFORK
+			printf("prepare restore memory layout using template snapshot\n");
+			map_entry* map_entry_list = cvm_map_entry_list[t_cid];
+			assert(map_entry_list!=NULL);
+			int fd = cvm_snapshot_fd[t_cid];
+			assert(fd>0);
+
+			unsigned long file_offset = 0l;
+			map_entry* p = map_entry_list;
+			while(p) {
+				unsigned long old_begin	= cvms[t_cid].cmp_begin;
+				unsigned long new_begin = cvm->cmp_begin;
+				size_t size = p->end - p->start;
+				unsigned long start = p->start - old_begin + new_begin;
+
+				void* res = mmap(start, size, p->prot, MAP_PRIVATE, fd, file_offset);
+				assert(res!=MAP_FAILED);
+
+				file_offset += size;
+				p = p->next;
+			}
+			printf("complete snapshot restoration\n");
+#else
+			printf("prepare to invoke tfork syscall, src_addr=%p, dst_addr=%p, len=%d\n", cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size);
+			if (tfork(cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size) == TFORK_FAILED) {
+				printf("tfork FAILED\n");
+				return 1;
+			}
+			printf("tfork complete\n");
+#endif
+
     }
 
     // todo: maybe stack conflicts when exec load template.

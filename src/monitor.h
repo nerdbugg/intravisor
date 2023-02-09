@@ -1,3 +1,6 @@
+#ifndef MONITOR_H
+#define MONITOR_H
+
 #define _GNU_SOURCE
 #include <dlfcn.h>
 #include <sched.h>
@@ -323,4 +326,4 @@ struct cap_relocs_s {
 	unsigned long perms;
 };
 
-
+#endif

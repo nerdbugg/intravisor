@@ -1,6 +1,7 @@
 #include "monitor.h"
 #include "time.h"
 #include "assert.h"
+#include "tfork.h"
 #include "cvm/init.h"
 
 struct s_box	cvms[MAX_CVMS];
