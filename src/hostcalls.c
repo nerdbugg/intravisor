@@ -1,3 +1,5 @@
+#include <math.h>
+
 #include "monitor.h"
 #include "tfork.h"
 
@@ -512,13 +514,22 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 				}
 			}
 			pthread_mutex_unlock(&ct->sbox->ct_lock);
-			save_cur_thread_and_exit(sboxptr_to_cid(ct->sbox), cur_ct);
+			// if (cur_ct == cur_ct->sbox->threads) {
+			// 	notify_other_thread_save(cur_ct);
+			// }
+			save_cur_thread_and_exit(sboxptr_to_cid(cur_ct->sbox), cur_ct);
 			return ret;
+
 ///
-//RESTORE
+//MATH.SIN
 /// 
 		case 116:
+			printf("math.sin x=%f ", *(double *)(&a0));
+			double y = cos(*(double *)(&a0));
+			printf("y=%f\n", y);
+			ret = *(long *)(&y);
 			break;
+
 ////
 //NETWORK
 ////

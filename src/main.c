@@ -63,7 +63,7 @@ void sig_handler(int j, siginfo_t *si, void *uap) {
 	while(1);
 }
 
-void setup_sig() {
+void setup_segv_sig() {
 	stack_t sigstack;
 	struct sigaction sa;
 #if 1
@@ -96,7 +96,10 @@ void setup_sig() {
 	}
 }
 
-
+void setup_sig() {
+	setup_segv_sig();
+	setup_save_sig();
+}
 
 void parse_cmdline(char *argv[], const char *disk_img, const char *runtime_so, char **yaml_cfg, int *skip_argc) {
 	for (++argv; *argv; ++argv)

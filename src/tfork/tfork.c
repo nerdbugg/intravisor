@@ -9,12 +9,15 @@
 
 #include "monitor.h"
 #include "tfork.h"
+#include "assert.h"
 
+#define SIGSAVE 16
 #define RET_COMP_PPC (16 * 11)
 #define RET_COMP_DDC (16 * 12)
 
 const int TFORK_FAILED = MAP_FAILED;
 const static int tfork_syscall_num = 577;
+extern struct c_thread *get_cur_thread();
 
 map_entry* cvm_map_entry_list[MAX_CVMS];
 int cvm_snapshot_fd[MAX_CVMS];
@@ -141,7 +144,7 @@ void gen_caps_restored(struct c_thread *target_thread)
 {
     target_thread->m_tp = getTP();
     target_thread->c_tp = (void *)(target_thread->stack + 4096);
-    
+
     struct s_box *cvm = target_thread->sbox;
     struct cvm_tmplt_ctx *ctx = &target_thread->ctx;
     struct s_box *t_cvm = &cvms[cvm->t_cid];
@@ -172,6 +175,13 @@ void gen_caps_restored(struct c_thread *target_thread)
     *sealed_ddc = cheri_seal(ret_comp_dcap, sealcap);
     *comp_ddc = datacap_create((void *)cvm->cmp_begin, (void *)cvm->cmp_end);
     prev_s0 = mon_to_comp(prev_s0, t_cvm);
+
+    printf("gen_caps_restored: sealed_pcc \n");
+    CHERI_CAP_PRINT(*sealed_pcc);
+    printf("gen_caps_restored: sealed_ddc \n");
+    CHERI_CAP_PRINT(*sealed_ddc);
+    printf("gen_caps_restored: comp_ddc \n");
+    CHERI_CAP_PRINT(*comp_ddc);
 
     __asm__ __volatile__(
         "ld sp, %0;"
@@ -242,4 +252,42 @@ void load_all_thread(int cid)
     }
 
     gen_caps_restored(me);
+}
+
+void notify_other_thread_save(struct c_thread *cur_thread)
+{
+    struct c_thread *threads = cur_thread->sbox->threads;
+    assert(cur_thread == threads);
+    for (int i = 1; i < 62; ++i)
+    {
+        if (threads[i].tid == NULL)
+        {
+            break;
+        }
+        pthread_kill(threads[i].tid, SIGSAVE);
+    }
+}
+
+void save_sig_handler(int j, siginfo_t *si, void *uap)
+{
+    printf("trap %d\n", j);
+    printf("SI_ADDR: %ld\n", si->si_addr);
+    
+    struct c_thread *cur_thread = get_cur_thread();
+    void (*host_save)() = comp_to_mon(0x15e8, cur_thread->sbox) ;
+    host_save();
+}
+
+void setup_save_sig()
+{
+    struct sigaction sa;
+    sa.sa_sigaction = save_sig_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_SIGINFO;
+
+    if (sigaction(SIGSAVE, &sa, NULL) == -1)
+    {
+        perror("sigaction");
+        exit(1);
+    }
 }
