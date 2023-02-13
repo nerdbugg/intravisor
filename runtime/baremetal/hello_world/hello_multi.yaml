@@ -15,6 +15,7 @@ cVMs:
     size: 0x10000000
     begin: 0x20000000
     end: 0x30000000
+  fork: 1
   wait: -1
   callback_out: monitor
 
@@ -25,5 +26,6 @@ cVMs:
     size: 0x10000000
     begin: 0x50000000
     end: 0x60000000
+  fork: 1
   wait: -1
   callback_out: monitor
