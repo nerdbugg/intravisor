@@ -116,7 +116,7 @@ int argc, char *argv[]
 
     cvms[cid].ret_from_mon = encl_map.ret_point;
     cvms[cid].syscall_handler = encl_map.syscall_handler;
-    cvms[cid].use_tfork = f->fork;
+
     memset(cvms[cid].libos, 0, MAX_LIBOS_PATH);
     strcpy(cvms[cid].libos, f->runtime);
 
