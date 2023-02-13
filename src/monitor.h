@@ -246,6 +246,8 @@ struct s_box {
 	char libos[MAX_LIBOS_PATH];
 	uint64_t start_time;
 	int t_cid;
+	int fork;
+	int use_tfork;
 };
 
 

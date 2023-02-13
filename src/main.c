@@ -118,7 +118,7 @@ void parse_cmdline(char *argv[], const char *disk_img, const char *runtime_so, c
 		else if (strcmp("-y", *argv) == 0 || strcmp("--yaml", *argv) == 0)
 		{
 			*yaml_cfg = *++argv;
-			printf("Using yaml.cfg = %s\n", yaml_cfg);
+			printf("Using yaml.cfg = %s\n", *yaml_cfg);
 			break;
 		}
 		else if (strcmp("-d", *argv) == 0 || strcmp("--disk", *argv) == 0)

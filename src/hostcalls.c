@@ -504,15 +504,14 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 //SAVE
 /// 
 		case 115:
-			printf("save this cvm, cid=%d\n", sboxptr_to_cid(ct->sbox));
+			ret = 0;
 			pthread_t tid = pthread_self();
-			pthread_mutex_lock(&ct->sbox->ct_lock);
-		    struct c_thread *cur_ct;
-			for(int i = 0; i < MAX_THREADS; i++) {
-				if(ct[i].tid == tid) {
-					cur_ct = &ct[i];
-				}
+			struct c_thread *cur_ct = get_cur_thread();
+			if (!cur_ct->sbox->fork) {
+				break;
 			}
+			printf("save this cvm, cid=%d\n", sboxptr_to_cid(ct->sbox));
+			pthread_mutex_lock(&ct->sbox->ct_lock);
 			pthread_mutex_unlock(&ct->sbox->ct_lock);
 			// if (cur_ct == cur_ct->sbox->threads) {
 			// 	notify_other_thread_save(cur_ct);
@@ -524,9 +523,10 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 //MATH.SIN
 /// 
 		case 116:
-			printf("math.sin x=%f ", *(double *)(&a0));
+			// printf("math.sin x=%f ", *(double *)(&a0));
+			ret = 0;
 			double y = cos(*(double *)(&a0));
-			printf("y=%f\n", y);
+			// printf("y=%f\n", y);
 			ret = *(long *)(&y);
 			break;
 

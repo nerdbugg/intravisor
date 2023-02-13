@@ -20,20 +20,23 @@ int init_pthread_stack(struct s_box *cvm)
     return 0;
 }
 
-int build_cvm(int cid, struct cmp_s *comp, char *libos, char *disk, int argc, char *argv[], char *cb_out, char *cb_in)
-{
+int build_cvm(int cid, struct cvm *f, 
+// struct cmp_s *comp, char *libos, char *disk, 
+int argc, char *argv[] 
+// , char *cb_out, char *cb_in
+) {
     struct encl_map_info encl_map;
-    void *base = comp->base;
-    unsigned long size = comp->size;
-    unsigned long cmp_begin = comp->begin;
-    unsigned long cmp_end = comp->end;
+    void *base = f->isol.base;
+    unsigned long size = f->isol.size;
+    unsigned long cmp_begin = f->isol.begin;
+    unsigned long cmp_end = f->isol.end;
 
     memset(&encl_map, 0, sizeof(struct encl_map_info));
 
-    load_elf(libos, base, &encl_map);
+    load_elf(f->runtime, base, &encl_map);
     if (encl_map.base < 0)
     {
-        printf("Could not load '%s', die\n", libos);
+        printf("Could not load '%s', die\n", f->runtime);
         while (1)
             ;
     }
@@ -74,7 +77,7 @@ int build_cvm(int cid, struct cmp_s *comp, char *libos, char *disk, int argc, ch
         struct cap_relocs_s *cr = (struct cap_relocs_s *)encl_map.cap_relocs;
         for (int j = 0; j < encl_map.cap_relocs_size / sizeof(struct cap_relocs_s); j++)
         {
-            printf("TODO: create cap: %p Base: %p Length: %ld Perms: %lx Unk = %ld\n", comp->base + cr[j].dst, cr[j].addr, cr[j].len, cr[j].perms, cr[j].unknown);
+            printf("TODO: create cap: %p Base: %p Length: %ld Perms: %lx Unk = %ld\n", f->isol.base + cr[j].dst, cr[j].addr, cr[j].len, cr[j].perms, cr[j].unknown);
             void *__capability rel_cap;
             if (cr[j].perms == 0x8000000000000000ll)
             {
@@ -84,8 +87,8 @@ int build_cvm(int cid, struct cmp_s *comp, char *libos, char *disk, int argc, ch
 				rel_cap = pure_codecap_create((void *) comp->base,(void *)  comp->base + cr[j].addr + cr[j].len);
 				rel_cap = cheri_setaddress(rel_cap, comp->base + cr[j].addr);
 #else
-                rel_cap = pure_codecap_create((void *)comp->base, (void *)comp->base + comp->size);
-                rel_cap = cheri_setaddress(rel_cap, comp->base + cr[j].addr);
+                rel_cap = pure_codecap_create((void *)f->isol.base, (void *)f->isol.base + f->isol.size);
+                rel_cap = cheri_setaddress(rel_cap, f->isol.base + cr[j].addr);
 #endif
             }
             else
@@ -94,14 +97,14 @@ int build_cvm(int cid, struct cmp_s *comp, char *libos, char *disk, int argc, ch
                 if (cr[j].len == 0xabba)
                 {
                     printf("replace cap for caps\n");
-                    rel_cap = datacap_create((void *)comp->base + 0xe001000, comp->base + 0xe002000);
+                    rel_cap = datacap_create((void *)f->isol.base + 0xe001000, f->isol.base + 0xe002000);
                 }
                 else
-                    rel_cap = datacap_create((void *)comp->base + cr[j].addr, (void *)comp->base + cr[j].addr + cr[j].len);
+                    rel_cap = datacap_create((void *)f->isol.base + cr[j].addr, (void *)f->isol.base + cr[j].addr + cr[j].len);
             }
             printf("store REL_CAP\n");
             CHERI_CAP_PRINT(rel_cap);
-            st_cap(cr[j].dst + comp->base, rel_cap);
+            st_cap(cr[j].dst + f->isol.base, rel_cap);
         }
     }
 
@@ -113,8 +116,9 @@ int build_cvm(int cid, struct cmp_s *comp, char *libos, char *disk, int argc, ch
 
     cvms[cid].ret_from_mon = encl_map.ret_point;
     cvms[cid].syscall_handler = encl_map.syscall_handler;
+    cvms[cid].use_tfork = f->fork;
     memset(cvms[cid].libos, 0, MAX_LIBOS_PATH);
-    strcpy(cvms[cid].libos, libos);
+    strcpy(cvms[cid].libos, f->runtime);
 
     //	printf("cvms.base = %p, cvms.box_size = %lx\n", cvms[cid].base, cvms[cid].box_size);
 
@@ -126,8 +130,8 @@ int build_cvm(int cid, struct cmp_s *comp, char *libos, char *disk, int argc, ch
 #else
     cvms[cid].fd = STDOUT_FILENO;
 #endif
-    if (disk)
-        strncpy(cvms[cid].disk_image, disk, sizeof(cvms[cid].disk_image));
+    if (f->disk)
+        strncpy(cvms[cid].disk_image, f->disk, sizeof(cvms[cid].disk_image));
 
     struct c_thread *ct = cvms[cid].threads;
     ////////////////////
@@ -139,8 +143,8 @@ int build_cvm(int cid, struct cmp_s *comp, char *libos, char *disk, int argc, ch
 
     ct[0].id = 0;
     ct[0].func = encl_map.entry_point;
-    ct[0].cb_in = cb_in;
-    ct[0].cb_out = cb_out;
+    ct[0].cb_in = f->cb_in;
+    ct[0].cb_out = f->cb_out;
     ct[0].stack_size = STACK_SIZE;
     ct[0].stack = (void *)((unsigned long)cvms[cid].top - STACK_SIZE);
     ct[0].arg = NULL;

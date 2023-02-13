@@ -27,17 +27,14 @@ int deploy_cvm(struct cvm *f)
     comp.begin = f->isol.begin; /* cmp_begin */
     comp.end = f->isol.end;     /* cmp_end  */
     int t_cid = cvms[cid].t_cid;
-    if (t_cid < 0)
+    if ( !cvms[cid].use_tfork )
     {
         // todo: sanitise base addresses, check cvms/sbox max number
         build_cvm(cid, // so far it is the best I can offer.
-                  &comp,
-                  f->runtime, /* libOS+init */
-                  f->disk,    /* user disk */
+                  f,
                   c_argc,
-                  c_argv,
-                  f->cb_out,
-                  f->cb_in);
+                  c_argv
+                );
     }
     else
     {
@@ -54,7 +51,7 @@ int cvm_worker(struct cvm *f)
     int cid = deploy_cvm(f);
     printf("BUILDING cvm complete: cid=%d, disk=%s, runtime=%s, base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, syscall_handler = '%ld', ret_from_mon = '%ld'\n", cid, cvms[cid].disk_image, cvms[cid].libos, cvms[cid].base, cvms[cid].box_size, cvms[cid].cmp_begin, cvms[cid].cmp_end, cvms[cid].syscall_handler, cvms[cid].ret_from_mon);
     struct s_box *cvm = &cvms[cid];
-    if (cvm->t_cid < 2)
+    if (!cvm->use_tfork)
     {
         // is template
         init_thread(cid);
@@ -113,14 +110,16 @@ void create_and_start_cvm(struct cvm *f)
     ct->stack = cvm->cmp_end - ct->stack_size;
 
     int t_cid = find_template(cid, f->runtime);
-    if (t_cid < 0)
+    cvm->t_cid = t_cid;
+    cvm->fork = f->fork;
+    cvm->use_tfork = (cvm->t_cid > 0) && cvm->fork;
+
+    if (cvm->use_tfork == false)
     {
-        cvm->t_cid = -1;
         init_pthread_stack(cvm);
     }
     else
     {
-        cvm->t_cid = t_cid;
 #ifndef TFORK
 			printf("prepare restore memory layout using template snapshot\n");
 			map_entry* map_entry_list = cvm_map_entry_list[t_cid];
@@ -155,7 +154,7 @@ void create_and_start_cvm(struct cvm *f)
     }
 
     // todo: maybe stack conflicts when exec load template.
-    if (t_cid < 0)
+    if (cvm -> use_tfork)
     {
         ret = pthread_attr_setstack(&ct->tattr, ct->stack, ct->stack_size);
     }
