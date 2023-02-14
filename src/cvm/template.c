@@ -15,7 +15,8 @@ int init_pthread_stack(struct s_box *cvm)
 #endif
     }
 
-    memset(ct->stack, 0, ct->stack_size);
+    /* Remove temporarily.The anonymous region is zero-filled*/
+    // memset(ct->stack, 0, ct->stack_size);
 
     place_canaries(ct->stack, ct->stack_size, 0xabbacaca);
     check_canaries(ct->stack, ct->stack_size, 0xabbacaca);
