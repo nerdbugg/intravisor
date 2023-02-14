@@ -226,8 +226,11 @@ void load_elf(char* file_to_map, void *base_addr, encl_map_info* result) {
             result->base = (void *)-1;
             fprintf(stderr, "1. Could not map segment (%p) of %s: %s\n", (void*)pdr->p_vaddr, file_to_map, strerror(errno));
 			while(1);
-        } else 
+        } else {
+#ifdef DEBUG
 			printf("Mapped %p, segment = %p, map_aaadr = %p, map_len = %lx\n", (void*)pdr->p_vaddr, segment, map_addr, map_len);
+#endif
+        }
 
         if (pdr->p_memsz > pdr->p_filesz) {
             size_t brk = (size_t)segment + pdr->p_filesz;

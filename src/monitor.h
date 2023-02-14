@@ -91,6 +91,7 @@
 
 
 //////////////////
+#ifdef DEBUG
 #define	CHERI_CAP_PRINT(cap) do {					\
   printf("tag %ju s %ju perms %08jx type %016jx\n",		\
       (uintmax_t)cheri_gettag(cap),				\
@@ -102,6 +103,9 @@
       (uintmax_t)cheri_getlen(cap),				\
       (uintmax_t)cheri_getoffset(cap));				\
 } while (0)
+#else
+#define	CHERI_CAP_PRINT(cap) while(false);
+#endif
 
 
 //#include <xxhash.h>
