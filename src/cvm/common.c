@@ -137,6 +137,11 @@ void create_and_start_cvm(struct cvm *f)
 			int fd = cvm_snapshot_fd[t_cid];
 			assert(fd>0);
 
+            // todo: find contiguous memory segments and merge mappings
+            // todo: using mprotect to devide it into multiple segments
+            map_entry *last = NULL;
+            size_t map_size = 0;
+            unsigned long map_start = NULL;
 			unsigned long file_offset = 0l;
 			map_entry* p = map_entry_list;
 			while(p) {
@@ -145,12 +150,44 @@ void create_and_start_cvm(struct cvm *f)
 				size_t size = p->end - p->start;
 				unsigned long start = p->start - old_begin + new_begin;
 
-				void* res = mmap(start, size, p->prot, MAP_PRIVATE, fd, file_offset);
-				assert(res!=MAP_FAILED);
+                if(last==NULL || p->start==last->end) {
+                    if(map_start == NULL) {
+                        map_start = start;
+                    }
+                    map_size += size;
+                } else {
+                    // note: first mmap RWX, then using mprotect to restore p->prot
+                    void* res = mmap(map_start, map_size, PROT_READ|PROT_WRITE|PROT_EXEC,
+                                    MAP_PRIVATE, fd, file_offset);
+                    assert(res!=MAP_FAILED);
+                    file_offset += map_size;
 
-				file_offset += size;
-				p = p->next;
+                    map_size = size;
+                    map_start = start;
+                }
+                last = p;
+                p = p->next;
 			}
+            // note: the last iterattion
+            if (last!=NULL) {
+                    void* res = mmap(map_start, map_size, PROT_READ|PROT_WRITE|PROT_EXEC,
+                                    MAP_PRIVATE, fd, file_offset);
+                    assert(res!=MAP_FAILED);
+            }
+
+            // note: using mprotect to restore permissions
+            p = map_entry_list;
+            while(p) {
+				unsigned long old_begin	= cvms[t_cid].cmp_begin;
+				unsigned long new_begin = cvm->cmp_begin;
+				size_t size = p->end - p->start;
+				unsigned long start = p->start - old_begin + new_begin;
+
+                int ret = mprotect(start, size, p->prot);
+                assert(ret!=-1);
+
+                p = p->next;
+            }
 #ifdef DEBUG
 			printf("complete snapshot restoration\n");
 #endif
