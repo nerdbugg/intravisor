@@ -3,6 +3,7 @@
 #include "assert.h"
 #include "tfork.h"
 #include "cvm/init.h"
+#include "cvm/log.h"
 
 struct s_box	cvms[MAX_CVMS];
 
@@ -81,9 +82,8 @@ void setup_segv_sig() {
 		exit(1);
 	}
 #endif
-#ifdef DEBUG
-	printf("%d Alternate stack is at %10p-%p\n", stsize, sigstack.ss_sp,sigstack.ss_sp+stsize);
-#endif
+
+	dlog("%d Alternate stack is at %10p-%p\n", stsize, sigstack.ss_sp,sigstack.ss_sp+stsize);
 
 //	sa.sa_handler = sig_handler;
 	sa.sa_sigaction = sig_handler;
@@ -118,9 +118,8 @@ void parse_cmdline(char *argv[], const char *disk_img, const char *runtime_so, c
 		else if (strcmp("-y", *argv) == 0 || strcmp("--yaml", *argv) == 0)
 		{
 			*yaml_cfg = *++argv;
-#ifdef DEBUG
-			printf("Using yaml.cfg = %s\n", *yaml_cfg);
-#endif
+			dlog("Using yaml.cfg = %s\n", *yaml_cfg);
+
 			break;
 		}
 		else if (strcmp("-d", *argv) == 0 || strcmp("--disk", *argv) == 0)
@@ -243,9 +242,8 @@ int main(int argc, char *argv[]) {
 	if(state == 0) {
 		printf("yaml is corrupted, die\n"); exit(1);
 	}
-#ifdef DEBUG
-	printf("[%3d ms]: finish parse yaml\n", gettime());
-#endif
+
+	dlog("[%3d ms]: finish parse yaml\n", gettime());
 
 	for (struct capfile *f = state->clist; f; f = f->next) {
 		// printf("capfile: name=%s, data='%s', size=0x%lx, addr=0x%lx \n", f->name, f->data, f->size, f->addr);

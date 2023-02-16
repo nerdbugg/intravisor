@@ -48,6 +48,7 @@
 #include <errno.h>
 
 #include <load_elf.h>
+#include "cvm/log.h"
 
 #define ROUNDUP(x, y)   ((((x)+((y)-1))/(y))*(y))
 #define ALIGNDOWN(k, v) ((unsigned long)(k)&(~((unsigned long)(v)-1)))
@@ -227,9 +228,7 @@ void load_elf(char* file_to_map, void *base_addr, encl_map_info* result) {
             fprintf(stderr, "1. Could not map segment (%p) of %s: %s\n", (void*)pdr->p_vaddr, file_to_map, strerror(errno));
 			while(1);
         } else {
-#ifdef DEBUG
-			printf("Mapped %p, segment = %p, map_aaadr = %p, map_len = %lx\n", (void*)pdr->p_vaddr, segment, map_addr, map_len);
-#endif
+			dlog("Mapped %p, segment = %p, map_aaadr = %p, map_len = %lx\n", (void*)pdr->p_vaddr, segment, map_addr, map_len);
         }
 
         if (pdr->p_memsz > pdr->p_filesz) {

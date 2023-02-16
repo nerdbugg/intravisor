@@ -1,4 +1,5 @@
 #include "monitor.h"
+#include "cvm/log.h"
 #include <assert.h>
 
 extern int TFORK_FAILED;
@@ -46,14 +47,12 @@ int deploy_cvm(struct cvm *f)
 
 int cvm_worker(struct cvm *f)
 {
-#ifdef DEBUG
-    printf("***************** Deploy '%s' ***************\n", f->name);
-    printf("BUILDING cvm: name=%s, disk=%s, runtime=%s, net=%s, args='%s', base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, cb_in = '%s', cb_out = '%s' wait = %ds\n", f->name, f->disk, f->runtime, f->net, f->args, f->isol.base, f->isol.size, f->isol.begin, f->isol.end, f->cb_in, f->cb_out, f->wait);
-#endif
+    dlog("***************** Deploy '%s' ***************\n", f->name);
+    dlog("BUILDING cvm: name=%s, disk=%s, runtime=%s, net=%s, args='%s', base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, cb_in = '%s', cb_out = '%s' wait = %ds\n", f->name, f->disk, f->runtime, f->net, f->args, f->isol.base, f->isol.size, f->isol.begin, f->isol.end, f->cb_in, f->cb_out, f->wait);
+
     int cid = deploy_cvm(f);
-#ifdef DEBUG
-    printf("BUILDING cvm complete: cid=%d, disk=%s, runtime=%s, base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, syscall_handler = '%ld', ret_from_mon = '%ld'\n", cid, cvms[cid].disk_image, cvms[cid].libos, cvms[cid].base, cvms[cid].box_size, cvms[cid].cmp_begin, cvms[cid].cmp_end, cvms[cid].syscall_handler, cvms[cid].ret_from_mon);
-#endif
+    dlog("BUILDING cvm complete: cid=%d, disk=%s, runtime=%s, base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, syscall_handler = '%ld', ret_from_mon = '%ld'\n", cid, cvms[cid].disk_image, cvms[cid].libos, cvms[cid].base, cvms[cid].box_size, cvms[cid].cmp_begin, cvms[cid].cmp_end, cvms[cid].syscall_handler, cvms[cid].ret_from_mon);
+
     struct s_box *cvm = &cvms[cid];
     if (!cvm->use_tfork)
     {
@@ -62,9 +61,7 @@ int cvm_worker(struct cvm *f)
     }
     else
     {
-#ifdef DEBUG
-        printf("load template, cid=%d, t_cid=%d\n", cid, cvm->t_cid);
-#endif
+        dlog("load template, cid=%d, t_cid=%d\n", cid, cvm->t_cid);
         load_all_thread(cid);
     }
 }
@@ -88,9 +85,8 @@ int find_template(int cid, char *libos)
 void create_and_start_cvm(struct cvm *f)
 {
     int cid = f->isol.base / 0x10000000;
-#ifdef DEBUG
-    printf("Deploy cthread of cvm, cid=%d\n", cid);
-#endif
+    dlog("Deploy cthread of cvm, cid=%d\n", cid);
+
     struct s_box *cvm = &cvms[cid];
     struct c_thread *ct = cvm->threads;
 
@@ -129,9 +125,7 @@ void create_and_start_cvm(struct cvm *f)
     else
     {
 #ifndef TFORK
-#ifdef DEBUG
-			printf("prepare restore memory layout using template snapshot\n");
-#endif
+			dlog("prepare restore memory layout using template snapshot\n");
 			map_entry* map_entry_list = cvm_map_entry_list[t_cid];
 			assert(map_entry_list!=NULL);
 			int fd = cvm_snapshot_fd[t_cid];
@@ -188,20 +182,14 @@ void create_and_start_cvm(struct cvm *f)
 
                 p = p->next;
             }
-#ifdef DEBUG
-			printf("complete snapshot restoration\n");
-#endif
+			dlog("complete snapshot restoration\n");
 #else
-#ifdef DEBUG
-			printf("prepare to invoke tfork syscall, src_addr=%p, dst_addr=%p, len=%d\n", cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size);
-#endif
+			dlog("prepare to invoke tfork syscall, src_addr=%p, dst_addr=%p, len=%d\n", cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size);
 			if (tfork(cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size) == TFORK_FAILED) {
 				printf("tfork FAILED\n");
 				exit(1);
 			}
-#ifdef DEBUG
-			printf("tfork complete\n");
-#endif
+			dlog("tfork complete\n");
 #endif
 
     }
@@ -219,45 +207,37 @@ void create_and_start_cvm(struct cvm *f)
     if (ret != 0)
     {
         perror("pthread attr setstack");
-#ifdef DEBUG
-        printf("ret = %d\n", ret);
-#endif
+        dlog("ret = %d\n", ret);
         while (1)
             ;
     }
 
     ret = pthread_create(&ct->tid, &ct->tattr, cvm_worker, f);
-#ifdef DEBUG
-    printf("pthread_create ret = %d\n", ret);
-#endif
+
+    dlog("pthread_create ret = %d\n", ret);
     if (ret != 0)
     {
         perror("pthread_create");
         exit(1);
     }
 
-#ifdef DEBUG
-    printf("f->wait=%d\n", f->wait);
-#endif
+    dlog("f->wait=%d\n", f->wait);
 
     if (f->wait == -1)
     {
-#ifdef DEBUG
-        printf("pthread join, tid=%p, isol.base=%p\n", ct->tid, f->isol.base);
-#endif
+        dlog("pthread join, tid=%p, isol.base=%p\n", ct->tid, f->isol.base);
+
         void *cret;
         for (int i=0; true; i++) {
             if (ct[i].tid == NULL) {
                 break;
             }
             pthread_join(ct[i].tid, &cret);
-#ifdef DEBUG
-            printf("cvm[%d]-thread[%d] has exited.\n", cid, i);
-#endif
+
+            dlog("cvm[%d]-thread[%d] has exited.\n", cid, i);
         }
-#ifdef DEBUG
-        printf("join returned\n");
-#endif
+
+        dlog("join returned\n");
     }
     else
         sleep(f->wait);

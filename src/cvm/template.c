@@ -1,4 +1,5 @@
-#include "../monitor.h"
+#include "monitor.h"
+#include "cvm/log.h"
 
 // When init template cvm, we must make sure stack memory is accessable by using mmap.
 int init_pthread_stack(struct s_box *cvm)
@@ -10,9 +11,7 @@ int init_pthread_stack(struct s_box *cvm)
         return 1;
     }
     else {
-#ifdef DEBUG
-        printf("[cVM STACKs] = [%p -- %lx]\n", ct->stack, (unsigned long)ct->stack + ct->stack_size);
-#endif
+        dlog("[cVM STACKs] = [%p -- %lx]\n", ct->stack, (unsigned long)ct->stack + ct->stack_size);
     }
 
     /* Remove temporarily.The anonymous region is zero-filled*/
@@ -51,9 +50,7 @@ int argc, char *argv[]
             ;
     }
 
-#ifdef DEBUG
-    printf("ELF BASE = %p, MAP SIZE = %lx, ENTRY = %p\n", encl_map.base, encl_map.size, encl_map.entry_point);
-#endif
+    dlog("ELF BASE = %p, MAP SIZE = %lx, ENTRY = %p\n", encl_map.base, encl_map.size, encl_map.entry_point);
 
     int ret = 0;
 
@@ -64,9 +61,7 @@ int argc, char *argv[]
             ;
     }
     else {
-#ifdef DEBUG
-        printf("encl_map.entry = %p\n", encl_map.entry_point);
-#endif
+        dlog("encl_map.entry = %p\n", encl_map.entry_point);
     }
 
     if (encl_map.ret_point == 0)
@@ -76,9 +71,7 @@ int argc, char *argv[]
             ;
     }
     else {
-#ifdef DEBUG
-        printf("encl_map.ret = %p\n", encl_map.ret_point);
-#endif
+        dlog("encl_map.ret = %p\n", encl_map.ret_point);
     }
 
     if (encl_map.cap_relocs)
@@ -253,9 +246,8 @@ void *init_thread(int cid)
     char *cenv = (char *)(sp_read - 4096 * 3);         // originally, here was *2, but networking corrupts this memory
     volatile unsigned long *sp = (sp_read - 4096 * 4); // I don't know why, but without volatile sp gets some wrong value after initing CENV in -O2
 
-#ifdef DEBUG
-    printf("target SP = %lx, old TP = %lx sp_read = %p, me->stacl = %p, getSP()=%p, me->c_tp = %p\n", sp, getTP(), sp_read, me->stack, getSP(), me->c_tp);
-#endif
+    dlog("target SP = %lx, old TP = %lx sp_read = %p, me->stacl = %p, getSP()=%p, me->c_tp = %p\n", sp, getTP(), sp_read, me->stack, getSP(), me->c_tp);
+
     int cenv_size = 0;
     // sp 是栈顶指针(位于低地址), 初始化栈按地址增长方向, 依次存放 argc, argv, envs
     sp[0] = me->argc;
@@ -278,9 +270,9 @@ void *init_thread(int cid)
     }
     sp[i + 1] = 0; // terminator
     int ienv = i + 2;
-#ifdef DEBUG
-    printf("&env0 = %p, &env1=%p\n", &sp[ienv], &sp[ienv + 1]);
-#endif
+
+    dlog("&env0 = %p, &env1=%p\n", &sp[ienv], &sp[ienv + 1]);
+
     sp[ienv++] = mon_to_comp(lc1, me->sbox);
     sp[ienv++] = mon_to_comp(env1, me->sbox);
     sp[ienv++] = mon_to_comp(env2, me->sbox);
@@ -290,9 +282,7 @@ void *init_thread(int cid)
     sp[ienv++] = 0;
 
     size_t *auxv = &sp[ienv];
-#ifdef DEBUG
-    printf("%d sp = %p\n", __LINE__, sp);
-#endif
+    dlog("%d sp = %p\n", __LINE__, sp);
 
     if (strlen(me->sbox->disk_image))
     {
@@ -392,49 +382,35 @@ void *init_thread(int cid)
     {
         void *__capability caps[10];
     } cinv_args;
-    //
+
     cinv_args.caps[0] = sealed_codecap;
-#ifdef DEBUG
-    printf("ca0: sealed COMP PPC\n");
+    dlog("ca0: sealed COMP PPC\n");
     CHERI_CAP_PRINT(cinv_args.caps[0]);
-#endif
-    //
+
     cinv_args.caps[1] = sealed_datacap;
-#ifdef DEBUG
-    printf("ca1: sealed COMP DDC\n");
+    dlog("ca1: sealed COMP DDC\n");
     CHERI_CAP_PRINT(cinv_args.caps[1]);
-#endif
-    //
+
     cinv_args.caps[2] = dcap;
-#ifdef DEBUG
-    printf("ca2: COMP DDC\n");
+    dlog("ca2: COMP DDC\n");
     CHERI_CAP_PRINT(cinv_args.caps[2]);
-#endif
-    //
+
     cinv_args.caps[3] = sealed_codecapt;
-#ifdef DEBUG
-    printf("ca3: sealed HC PCC\n");
+    dlog("ca3: sealed HC PCC\n");
     CHERI_CAP_PRINT(cinv_args.caps[3]);
-#endif
-    //
+
     cinv_args.caps[4] = sealed_datacapt;
-#ifdef DEBUG
-    printf("ca4: sealed HC DDC (mon.DDC)\n");
+    dlog("ca4: sealed HC DDC (mon.DDC)\n");
     CHERI_CAP_PRINT(cinv_args.caps[4]);
-#endif
-    //
+
     cinv_args.caps[5] = sealed_codecapt2;
-#ifdef DEBUG
-    printf("ca5: sealed OCALL PCC \n");
+    dlog("ca5: sealed OCALL PCC \n");
     CHERI_CAP_PRINT(cinv_args.caps[5]);
-#endif
-    //
+
     cinv_args.caps[6] = sealed_ret_from_mon;
-#ifdef DEBUG
-    printf("ca6: sealed ret from mon\n");
+    dlog("ca6: sealed ret from mon\n");
     CHERI_CAP_PRINT(cinv_args.caps[6]);
-#endif
-    //
+
 
     if (me->sbox->pure)
     {
@@ -445,7 +421,7 @@ void *init_thread(int cid)
 
         //
         cinv_args.caps[7] = sp_cap;
-        printf("ca7: SP cap for purecap cVMs\n");
+        dlog("ca7: SP cap for purecap cVMs\n");
         CHERI_CAP_PRINT(cinv_args.caps[7]);
         //
     }
@@ -455,11 +431,11 @@ void *init_thread(int cid)
     //                      0x2ff81000
     me->c_tp = mon_to_comp(me->c_tp, me->sbox);
     // me->c_tp = 0xff81000
-#ifdef DEBUG
-    printf("[%3d ms]: finish init_thread\n", gettime());
-    printf("HW: sp = %p, tp = %p\n", sp, me->c_tp);
-    printf("-----------------------------------------------\n");
-#endif
+
+    dlog("[%3d ms]: finish init_thread\n", gettime());
+    dlog("HW: sp = %p, tp = %p\n", sp, me->c_tp);
+    dlog("-----------------------------------------------\n");
+
     __asm__ __volatile__("mv sp, %0;" ::"r"(sp)
                          : "memory");
     __asm__ __volatile__("mv tp, %0;" ::"r"(me->c_tp)

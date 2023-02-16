@@ -9,6 +9,7 @@
 
 #include "monitor.h"
 #include "tfork.h"
+#include "cvm/log.h"
 #include "assert.h"
 
 #define SIGSAVE 16
@@ -114,10 +115,9 @@ void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
     // create mmap shared region
     void* res = mmap(NULL, cmp_size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
     assert(res != MAP_FAILED);
-#ifdef DEBUG
-    printf("cmp_begin = 0x%lx, cmp_end = 0x%lx\n", cmp_begin, cmp_end);
-    printf("snapshot data memory region: %p - %p\n", res, res+cmp_size);
-#endif
+
+    dlog("cmp_begin = 0x%lx, cmp_end = 0x%lx\n", cmp_begin, cmp_end);
+    dlog("snapshot data memory region: %p - %p\n", res, res+cmp_size);
 
     uint8_t* snapshot_data = res;
     unsigned long offset = 0;
@@ -134,9 +134,9 @@ void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
 #endif
     // printf("save status = %d\n", status);
     // __asm__ __volatile__("sd sp, %0" :"=m" (cur_sp) :: "memory");
-#ifdef DEBUG
-    printf("sp is %x; ra is %x;\n", cur_sp, cur_ra);
-#endif
+
+    dlog("sp is %x; ra is %x;\n", cur_sp, cur_ra);
+
     cur_thread->ctx.sp = cur_sp;
     cur_thread->ctx.ra = cur_ra;
     cur_thread->ctx.s0 = cur_s0;
@@ -179,14 +179,12 @@ void gen_caps_restored(struct c_thread *target_thread)
     *comp_ddc = datacap_create((void *)cvm->cmp_begin, (void *)cvm->cmp_end);
     prev_s0 = mon_to_comp(prev_s0, t_cvm);
 
-#ifdef DEBUG
-    printf("gen_caps_restored: sealed_pcc \n");
+    dlog("gen_caps_restored: sealed_pcc \n");
     CHERI_CAP_PRINT(*sealed_pcc);
-    printf("gen_caps_restored: sealed_ddc \n");
+    dlog("gen_caps_restored: sealed_ddc \n");
     CHERI_CAP_PRINT(*sealed_ddc);
-    printf("gen_caps_restored: comp_ddc \n");
+    dlog("gen_caps_restored: comp_ddc \n");
     CHERI_CAP_PRINT(*comp_ddc);
-#endif
 
     __asm__ __volatile__(
         "ld sp, %0;"

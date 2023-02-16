@@ -18,6 +18,10 @@ ifdef TFORK
   CFLAGS += -DTFORK
 endif
 
+ifdef DEBUG
+  CFLAGS += -DDEBUG
+endif
+
 target_c = ${OBJDIR}/$(patsubst %.c,%.o,$(notdir ${1})) 
 target_s = ${OBJDIR}/$(patsubst %.S,%.o,$(notdir ${1})) 
 obj.c :=
