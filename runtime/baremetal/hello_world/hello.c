@@ -2,7 +2,6 @@
 #include "hostcalls.h"
 
 #define MSG "hello world, let's read cap 'test1' \n"
-extern syscall_write(int fd, char * buf, int len);
 
 void hello_c() {
 	char buf[32];

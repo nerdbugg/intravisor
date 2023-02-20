@@ -33,7 +33,8 @@ libhello_bypass_debug.so: $(OBJ) bypass.o
 
 sync:
 	scp libhello* root@cheribsd:/intravisor/baremetal/multi_thread
-	scp hello.c hostcalls.c multi_thread.yaml root@cheribsd:/intravisor/baremetal/multi_thread
+	scp hello.c hostcalls.c root@cheribsd:/intravisor/baremetal/multi_thread
+	# scp multi_thread.yaml root@cheribsd:/intravisor/baremetal/multi_thread
 
 clean:
 	rm -rf ./*.o ./*.so

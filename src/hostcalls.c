@@ -504,20 +504,11 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 //SAVE
 /// 
 		case 115:
-			ret = 0;
-			pthread_t tid = pthread_self();
-			struct c_thread *cur_ct = get_cur_thread();
-			if (!cur_ct->sbox->fork) {
-				break;
+			ct->notified = true;
+			if (ct == ct->sbox->threads) {
+				notify_other_thread_save(ct);
 			}
-			printf("save this cvm, cid=%d\n", sboxptr_to_cid(ct->sbox));
-			pthread_mutex_lock(&ct->sbox->ct_lock);
-			pthread_mutex_unlock(&ct->sbox->ct_lock);
-			// if (cur_ct == cur_ct->sbox->threads) {
-			// 	notify_other_thread_save(cur_ct);
-			// }
-			save_cur_thread_and_exit(sboxptr_to_cid(cur_ct->sbox), cur_ct);
-			return ret;
+			break;
 
 ///
 //MATH.SIN
@@ -692,6 +683,12 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 	if (( tid == 2 && t5 !=1) && debug_calls)
 		printf("OUT: %p: %lx %lx %lx %lx %lx %lx %lx %lx, %d \n", getSP(), a0, a1, a2, a3, a4, a5, a6, a7, t5);
 #endif
+
+	if (ct->notified && ct->sbox->fork) {
+		ct->notified = false;
+		printf("save this cvm, cid=%d\n", sboxptr_to_cid(ct->sbox));
+		save_cur_thread_and_exit(sboxptr_to_cid(ct->sbox), ct);
+	}
 
 	if(getTP() != ct->m_tp) {
 		printf("TP has changed %p %p\n", getTP(), ct->m_tp);

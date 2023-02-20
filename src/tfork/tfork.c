@@ -6,13 +6,14 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <assert.h>
+#include <ucontext.h>
 
 #include "monitor.h"
 #include "tfork.h"
 #include "cvm/log.h"
 #include "assert.h"
 
-#define SIGSAVE 16
+#define SIGSAVE SIGUSR1
 #define RET_COMP_PPC (16 * 11)
 #define RET_COMP_DDC (16 * 12)
 
@@ -138,7 +139,7 @@ void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
     dlog("sp is %x; ra is %x;\n", cur_sp, cur_ra);
 
     cur_thread->ctx.sp = cur_sp;
-    cur_thread->ctx.ra = cur_ra;
+    // cur_thread->ctx.ra = cur_ra;
     cur_thread->ctx.s0 = cur_s0;
     destroy_carrie_thread(cur_thread->sbox->threads);
 }
@@ -267,30 +268,32 @@ void notify_other_thread_save(struct c_thread *cur_thread)
         {
             break;
         }
-        pthread_kill(threads[i].tid, SIGSAVE);
+        // pthread_kill(threads[i].tid, SIGSAVE);
+        threads[i].notified = true;
     }
 }
 
-void save_sig_handler(int j, siginfo_t *si, void *uap)
-{
-    printf("trap %d\n", j);
-    printf("SI_ADDR: %ld\n", si->si_addr);
+// void save_sig_handler(int j, siginfo_t *si, ucontext_t *uap)
+// {
+//     printf("trap %d\n", j);
+//     printf("SI_ADDR: %ld\n", si->si_addr);
     
-    struct c_thread *cur_thread = get_cur_thread();
-    void (*host_save)() = comp_to_mon(0x15e8, cur_thread->sbox) ;
-    host_save();
-}
+//     struct c_thread *cur_thread = get_cur_thread();
+//     mcontext_t *mctx = &((ucontext_t *)uap)->uc_mcontext;
 
-void setup_save_sig()
-{
-    struct sigaction sa;
-    sa.sa_sigaction = save_sig_handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_SIGINFO;
+    
+// }
 
-    if (sigaction(SIGSAVE, &sa, NULL) == -1)
-    {
-        perror("sigaction");
-        exit(1);
-    }
-}
+// void setup_save_sig()
+// {
+//     struct sigaction sa;
+//     sa.sa_sigaction = save_sig_handler;
+//     sigemptyset(&sa.sa_mask);
+//     sa.sa_flags = SA_SIGINFO;
+
+//     if (sigaction(SIGSAVE, &sa, NULL) == -1)
+//     {
+//         perror("sigaction");
+//         exit(1);
+//     }
+// }
