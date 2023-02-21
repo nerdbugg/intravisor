@@ -3,6 +3,8 @@
 #include "monitor.h"
 #include "tfork.h"
 
+#define SIGSAVE SIGUSR1
+
 #define __asm_syscall(...) \
 	__asm__ __volatile__ ("ecall\n\t" \
 	: "=r"(a0) : __VA_ARGS__ : "memory"); \
@@ -376,8 +378,6 @@ struct c_thread *get_cur_thread() {
 /************************ HOSTCALLs **************/
 
 //the most of the calls are related to MUSL-LKL. They should be separated from basic calls. Ideally, moved into the runtime/musllkl directory and loaded as shared library.
-
-
 long hostcall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, long a7) {
 	long t5 = (long) getT5();
 
@@ -521,6 +521,26 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 			ret = *(long *)(&y);
 			break;
 
+///
+// REGISTER SIGNAL
+/// 
+		// case 117:
+		// 	ret = 0;
+		// 	void (*handler)(int) = comp_to_mon(a0, ct->sbox);
+		// 	printf("register signal handler, signum=%d, handler=%p\n", SIGSAVE, handler);
+			
+		// 	struct sigaction sa;
+		// 	sa.sa_sigaction = handler;
+		// 	sigemptyset(&sa.sa_mask);
+		// 	sa.sa_flags = SA_SIGINFO;
+
+		// 	if (sigaction(SIGSAVE, &sa, NULL) == -1)
+		// 	{
+		// 		perror("sigaction");
+		// 		exit(1);
+		// 	}
+
+		// 	break;
 ////
 //NETWORK
 ////

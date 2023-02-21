@@ -223,8 +223,8 @@ long load_sub_thread(struct c_thread *ct, struct c_thread *t_ct)
         printf("ret = %d\n", ret);
     }
 #endif
-
-    ret = pthread_create(&ct->tid, &ct->tattr, gen_caps_restored, ct);
+    // TODO: need to add offset to registers relatived to pcc and ddc?
+    ret = pthread_create(&ct->tid, &ct->tattr, setcontext, ct->uctx);
     if (ret != 0)
     {
         perror("pthread create");
@@ -245,7 +245,7 @@ void load_all_thread(int cid)
 
     for (int i = 1; i < 63; i++)
     {
-        if (t_me[i].ctx.sp == NULL)
+        if (t_me[i].ctx.sp == NULL && t_me[i].uctx == NULL)
         {
             continue;
         }
@@ -268,32 +268,32 @@ void notify_other_thread_save(struct c_thread *cur_thread)
         {
             break;
         }
-        // pthread_kill(threads[i].tid, SIGSAVE);
-        threads[i].notified = true;
+        pthread_kill(threads[i].tid, SIGSAVE);
+        // threads[i].notified = true;
     }
 }
 
-// void save_sig_handler(int j, siginfo_t *si, ucontext_t *uap)
-// {
-//     printf("trap %d\n", j);
-//     printf("SI_ADDR: %ld\n", si->si_addr);
+void save_sig_handler(int j, siginfo_t *si, ucontext_t *uap)
+{
+    printf("trap %d\n", j);
+    printf("SI_ADDR: %ld\n", si->si_addr);
     
-//     struct c_thread *cur_thread = get_cur_thread();
-//     mcontext_t *mctx = &((ucontext_t *)uap)->uc_mcontext;
-
+    struct c_thread *cur_thread = get_cur_thread();
+    cur_thread->uctx = uap;
     
-// }
+    destroy_carrie_thread(cur_thread->sbox->threads);
+}
 
-// void setup_save_sig()
-// {
-//     struct sigaction sa;
-//     sa.sa_sigaction = save_sig_handler;
-//     sigemptyset(&sa.sa_mask);
-//     sa.sa_flags = SA_SIGINFO;
+void setup_save_sig()
+{
+    struct sigaction sa;
+    sa.sa_sigaction = save_sig_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_SIGINFO;
 
-//     if (sigaction(SIGSAVE, &sa, NULL) == -1)
-//     {
-//         perror("sigaction");
-//         exit(1);
-//     }
-// }
+    if (sigaction(SIGSAVE, &sa, NULL) == -1)
+    {
+        perror("sigaction");
+        exit(1);
+    }
+}

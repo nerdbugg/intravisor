@@ -98,7 +98,7 @@ void setup_segv_sig() {
 
 void setup_sig() {
 	setup_segv_sig();
-	// setup_save_sig();
+	setup_save_sig();
 }
 
 void parse_cmdline(char *argv[], const char *disk_img, const char *runtime_so, char **yaml_cfg, int *skip_argc) {

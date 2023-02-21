@@ -189,6 +189,7 @@ struct c_thread {
 	struct stream_caps_store *cs;
 	struct cvm_tmplt_ctx ctx;
 	bool notified;
+	ucontext_t *uctx;
 };
 
 struct cs_lock {

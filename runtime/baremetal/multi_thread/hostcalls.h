@@ -10,3 +10,4 @@ long host_pthread_create(void *f, void *arg);
 int host_thread_join(long tid);
 void host_exit();
 void host_save();
+void host_signal(void *handler);

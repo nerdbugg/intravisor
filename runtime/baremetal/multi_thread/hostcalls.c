@@ -66,9 +66,19 @@ void host_save()
 						 : "memory");
 }
 
+// long pthread_target_wrapper(void *args[2]) {
+// 	host_write("multi_thread cvm, wrap target function, target=%p, ");
+// 	host_write("")
+// 	void (*f)(void *) = args[0];
+// 	void *arg = args[1];
+// 	f(arg);
+// 	host_exit();
+// }
+
 long host_pthread_create(void *f, void *arg)
 {
 	int tmp = 11;
+	// void *args[2] = {f, arg};
 	register long t5 __asm__("t5") = tmp;
 	register long a0 __asm__("a0") = f;
 	register long a1 __asm__("a1") = arg;
@@ -93,4 +103,15 @@ int host_thread_join(long tid)
 						 : "memory");
 
 	return (int)a0;
+}
+
+void host_signal(void (*handler)(int)) {
+	// int tmp = 117;
+	register long t5 __asm__("t5") = 117;
+	register long a0 __asm__("a0") = handler;
+
+	__asm__ __volatile__("jal c_out"
+						 : "=r"(a0)
+						 : "r"(t5), "r"(a0)
+						 : "memory");
 }
