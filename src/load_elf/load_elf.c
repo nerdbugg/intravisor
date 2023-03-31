@@ -46,6 +46,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <errno.h>
+#include <assert.h>
 
 #include <load_elf.h>
 #include "cvm/log.h"
@@ -140,8 +141,14 @@ void load_elf(char* file_to_map, void *base_addr, encl_map_info* result) {
 //									break;
 								}
 
-
+                                if(strcmp("host_exit", &strtab[ts->st_name]) == 0) {
+//								printf("%ld: %ld %ld %ld %ld %lx %ld\n", j,ts->st_name, ts->st_info, ts->st_other, ts->st_shndx, ts->st_value, ts->st_size);
+//									printf("string = %s, val=%lx\n", &strtab[ts->st_name], ts->st_value);
+									result->host_exit = ts->st_value;
+//									break;
+								}
 						}
+                        assert(result->host_exit != NULL);
 
                }
        }

@@ -9,8 +9,9 @@ SRC_YAML := libyaml/src/api.c libyaml/src/dumper.c libyaml/src/emitter.c libyaml
 SRC_LOADER := load_elf/load_elf.c
 SRC_TFORK := tfork/tfork.c
 SRC_CVM := cvm/derived.c cvm/template.c cvm/common.c
+SRC_DAEMON := daemon.c
 
-CFILES  := $(SRC_LKL)  $(SRC_LOADER) $(SRC_YAML) $(SRC_TFORK) $(SRC_CVM)
+CFILES  := $(SRC_LKL)  $(SRC_LOADER) $(SRC_YAML) $(SRC_TFORK) $(SRC_CVM) $(SRC_DAEMON)
 ASFILES := arch/riscv/asm.S
 CFLAGS	:= -I . -I lkl_wrap/include -I load_elf/ -I tfork/ -I lkl_wrap -I libyaml/include -Ilibyaml/src -DHAVE_CONFIG_H -Ilibyaml/
 

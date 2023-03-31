@@ -7,11 +7,13 @@
 #include <unistd.h>
 #include <assert.h>
 #include <ucontext.h>
+#include <machine/ucontext.h>
 
 #include "monitor.h"
 #include "tfork.h"
 #include "cvm/log.h"
 #include "assert.h"
+#include "daemon.h"
 
 #define SIGSAVE SIGUSR1
 #define RET_COMP_PPC (16 * 11)
@@ -21,7 +23,7 @@ const int TFORK_FAILED = MAP_FAILED;
 const static int tfork_syscall_num = 577;
 extern struct c_thread *get_cur_thread();
 
-map_entry* cvm_map_entry_list[MAX_CVMS];
+map_entry *cvm_map_entry_list[MAX_CVMS];
 int cvm_snapshot_fd[MAX_CVMS];
 
 int tfork(void *src_addr, void *dst_addr, int len)
@@ -29,58 +31,62 @@ int tfork(void *src_addr, void *dst_addr, int len)
     return syscall(tfork_syscall_num, src_addr, dst_addr, len);
 }
 
-unsigned int parse_permstr(char* perms)
+unsigned int parse_permstr(char *perms)
 {
     unsigned int res = 0;
-    if(perms[0] == 'r')
+    if (perms[0] == 'r')
         res |= PROT_READ;
-    if(perms[1] == 'w')
+    if (perms[1] == 'w')
         res |= PROT_WRITE;
-    if(perms[2] == 'x')
+    if (perms[2] == 'x')
         res |= PROT_EXEC;
     return res;
 }
 
-map_entry* get_map_entry_list(int cid)
+map_entry *get_map_entry_list(int cid)
 {
     FILE *map_file = fopen("/proc/curproc/map", "r");
     assert(map_file != NULL);
 
-    map_entry *map_entry_list=NULL, *rear=NULL;
- 
+    map_entry *map_entry_list = NULL, *rear = NULL;
+
     unsigned long range_low, range_high;
-    range_low   = cvms[cid].cmp_begin;
-    range_high  = cvms[cid].cmp_end;
+    range_low = cvms[cid].cmp_begin;
+    range_high = cvms[cid].cmp_end;
 
     unsigned long start, end;
     int resident, privateresident;
-    void* obj;
+    void *obj;
     char permstr[32] = "";
 
     char map_buf[256];
-    while(fgets(map_buf, sizeof(map_buf), map_file)) {
+    while (fgets(map_buf, sizeof(map_buf), map_file))
+    {
         int num = sscanf(map_buf, "0x%lx 0x%lx %d %d %p %31s",
                          &start, &end,
                          &resident, &privateresident,
                          &obj, permstr);
         assert(num == 6);
 
-        if(end-1 < range_low)
+        if (end - 1 < range_low)
             continue;
-        if(start >= range_high)
+        if (start >= range_high)
             break;
 
         int prot = parse_permstr(permstr);
-        map_entry *entry = (map_entry*)malloc(sizeof(map_entry));
-        entry->start= start;
-        entry->end  = end;
+        map_entry *entry = (map_entry *)malloc(sizeof(map_entry));
+        entry->start = start;
+        entry->end = end;
         entry->prot = prot;
         entry->next = NULL;
 
-        if(map_entry_list==NULL) {
+        if (map_entry_list == NULL)
+        {
             map_entry_list = entry;
-        } else {
-            rear->next  = entry;
+        }
+        else
+        {
+            rear->next = entry;
         }
         rear = entry;
     }
@@ -98,10 +104,10 @@ void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
 
 #ifndef TFORK
     // get memory layout of template memory region
-    map_entry* map_entry_list = get_map_entry_list(cid);
+    map_entry *map_entry_list = get_map_entry_list(cid);
     cvm_map_entry_list[cid] = map_entry_list;
 
-    //print_map_entry_list(map_entry_list);
+    // print_map_entry_list(map_entry_list);
 
     // save memory memory content
     int fd = memfd_create(cvms[cid].libos, 0);
@@ -114,33 +120,35 @@ void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
     cvm_snapshot_fd[cid] = fd;
 
     // create mmap shared region
-    void* res = mmap(NULL, cmp_size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+    void *res = mmap(NULL, cmp_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     assert(res != MAP_FAILED);
 
     dlog("cmp_begin = 0x%lx, cmp_end = 0x%lx\n", cmp_begin, cmp_end);
-    dlog("snapshot data memory region: %p - %p\n", res, res+cmp_size);
+    dlog("snapshot data memory region: %p - %p\n", res, res + cmp_size);
 
-    uint8_t* snapshot_data = res;
+    uint8_t *snapshot_data = res;
     unsigned long offset = 0;
-    map_entry *p=map_entry_list;
-    while(p!=NULL) {
+    map_entry *p = map_entry_list;
+    while (p != NULL)
+    {
         size_t size = p->end - p->start;
 
-        memcpy(snapshot_data+offset, p->start, size);
-        
+        memcpy(snapshot_data + offset, p->start, size);
+
         offset += size;
         p = p->next;
     }
-    assert(munmap(snapshot_data, cmp_size)==0);
+    assert(munmap(snapshot_data, cmp_size) == 0);
 #endif
     // printf("save status = %d\n", status);
     // __asm__ __volatile__("sd sp, %0" :"=m" (cur_sp) :: "memory");
 
     dlog("sp is %x; ra is %x;\n", cur_sp, cur_ra);
 
-    cur_thread->ctx.sp = cur_sp;
+    // cur_thread->ctx.s0 = cur_sp;
     // cur_thread->ctx.ra = cur_ra;
     cur_thread->ctx.s0 = cur_s0;
+
     destroy_carrie_thread(cur_thread->sbox->threads);
 }
 
@@ -197,6 +205,49 @@ void gen_caps_restored(struct c_thread *target_thread)
         "m"(*sealed_pcc), "m"(*sealed_ddc), "m"(*comp_ddc));
 }
 
+long load_ucontext(struct c_thread *target_thread)
+{
+    ucontext_t *uctx;
+    struct s_box *cvm, *t_cvm;
+    struct capreg *cap_regs;
+    void *__capability sealcap;
+    size_t sealcap_size;
+
+    cvm = target_thread->sbox;
+    t_cvm = &cvms[cvm->t_cid];
+
+    target_thread->m_tp = getTP();
+    target_thread->c_tp = (void *)(target_thread->stack + 4096);
+
+    dlog("monitor: load_ucontext, thread.uctx=%p\n", target_thread->uctx);
+    // uctx = (uint64_t)target_thread->uctx + (uint64_t)target_thread->sbox->base;
+    uctx = &target_thread->uctx;
+    uctx->uc_mcontext.mc_gpregs.gp_tp = target_thread->c_tp;
+    dlog("monitor: load_ucontext, sbox->base=0x%x, ucontext addr=0x%x\n", target_thread->sbox->base, uctx);
+    // cap_regs = uctx->uc_mcontext.mc_capregs + (uint64_t)target_thread->sbox->base;
+    cap_regs = &target_thread->cap_regs;
+    uctx->uc_mcontext.mc_capregs = cap_regs;
+
+    void *__capability ret_comp_pcc = codecap_create(t_cvm->cmp_begin, t_cvm->cmp_end);
+    ret_comp_pcc = cheri_setaddress(ret_comp_pcc, (uint64_t)uctx->uc_mcontext.mc_gpregs.gp_sepc);
+    void *__capability ret_comp_dcap = datacap_create(t_cvm->cmp_begin, (void *)t_cvm->cmp_end);
+
+    void *__capability *sealed_pcc = &cap_regs->sepcc;
+    void *__capability *sealed_ddc = &cap_regs->ddc;
+
+    sealcap_size = sizeof(sealcap);
+    if (sysctlbyname("security.cheri.sealcap", &sealcap, &sealcap_size, NULL, 0) < 0)
+    {
+        printf("sysctlbyname(security.cheri.sealcap)\n");
+        exit(1);
+    }
+
+    *sealed_pcc = cheri_seal(ret_comp_pcc, sealcap);
+    *sealed_ddc = cheri_seal(ret_comp_dcap, sealcap);
+
+    setcontext(uctx);
+}
+
 long load_sub_thread(struct c_thread *ct, struct c_thread *t_ct)
 {
     int ret = pthread_attr_init(&ct->tattr);
@@ -224,7 +275,7 @@ long load_sub_thread(struct c_thread *ct, struct c_thread *t_ct)
     }
 #endif
     // TODO: need to add offset to registers relatived to pcc and ddc?
-    ret = pthread_create(&ct->tid, &ct->tattr, setcontext, ct->uctx);
+    ret = pthread_create(&ct->tid, &ct->tattr, load_ucontext, ct);
     if (ret != 0)
     {
         perror("pthread create");
@@ -245,9 +296,10 @@ void load_all_thread(int cid)
 
     for (int i = 1; i < 63; i++)
     {
-        if (t_me[i].ctx.sp == NULL && t_me[i].uctx == NULL)
+        dlog("monitor: load_all_thread, t_me[%d].uctx=%p\n", i, t_me[i].uctx);
+        if (t_me[i].uctx.uc_mcontext.mc_gpregs.gp_sp == NULL)
         {
-            continue;
+            break;
         }
         memcpy(&me[i], &t_me[i], sizeof(struct c_thread));
         me[i].sbox = cvm;
@@ -260,40 +312,91 @@ void load_all_thread(int cid)
 
 void notify_other_thread_save(struct c_thread *cur_thread)
 {
-    struct c_thread *threads = cur_thread->sbox->threads;
+    int i, capreg_size;
+    void *sp;
+    extern int send_req, receive_resp;
+    struct c_thread *threads;
+    snapshot_req_t req;
+    snapshot_resp_t resp;
+    ucontext_t *stack_uctx;
+    struct capregs *stack_capregs;
+
+    capreg_size = sizeof(struct capregs);
+    dlog("monitor: capreg_size=%d\n", capreg_size);
+    threads = cur_thread->sbox->threads;
     assert(cur_thread == threads);
-    for (int i = 1; i < 62; ++i)
+
+    memset(&req, 0, sizeof(req));
+    req.main_thread_id = threads[0].task_id;
+    req.host_exit_addr = cur_thread->sbox->base + cur_thread->sbox->host_exit_addr;
+    dlog("monitor: main_thread_id=%d\n", req.main_thread_id);
+    for (i = 1; i < 62; ++i)
     {
-        if (threads[i].tid == NULL)
+        if (threads[i].task_id == NULL)
         {
             break;
         }
-        pthread_kill(threads[i].tid, SIGSAVE);
-        // threads[i].notified = true;
+        dlog("monitor: threads[%d].tid=%d\n", i, threads[i].task_id);
+        req.sub_threads[i - 1].task_id = threads[i].task_id;
+        req.sub_threads[i - 1].pthread_id = threads[i].tid;
     }
-}
-
-void save_sig_handler(int j, siginfo_t *si, ucontext_t *uap)
-{
-    printf("trap %d\n", j);
-    printf("SI_ADDR: %ld\n", si->si_addr);
-    
-    struct c_thread *cur_thread = get_cur_thread();
-    cur_thread->uctx = uap;
-    
-    destroy_carrie_thread(cur_thread->sbox->threads);
-}
-
-void setup_save_sig()
-{
-    struct sigaction sa;
-    sa.sa_sigaction = save_sig_handler;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_SIGINFO;
-
-    if (sigaction(SIGSAVE, &sa, NULL) == -1)
+    if (i == 1)
     {
-        perror("sigaction");
-        exit(1);
+        return;
     }
+
+    dlog("monitor: ready to send snapshot req. fd=%d\n", send_req);
+    write(send_req, &req, sizeof(req));
+    dlog("monitor: ready to read snapshot response. fd=%d\n", receive_resp);
+    read(receive_resp, &resp, sizeof(resp));
+    dlog("monitor: receive snapshot response.\n");
+
+    for (i = 0; i < MAX_THREADS; i++)
+    {
+        sp = resp.contexts[i].gp_regs.sp;
+        if (sp == NULL)
+        {
+            break;
+        }
+        sp += (uint64_t)cur_thread->sbox->base;
+
+        stack_uctx = &threads[i + 1].uctx;
+        stack_capregs = &threads[i + 1].cap_regs;
+        // must align to 16 Bytes.
+        // stack_capregs = ((uint64_t)stack_uctx - capreg_size) & (~16 + 1);
+
+        makecontext(stack_uctx, 0, 0);
+        memcpy(&stack_uctx->uc_mcontext.mc_gpregs, &resp.contexts[i].gp_regs, sizeof(struct reg));
+        stack_uctx->uc_mcontext.mc_capregs = (uint64_t)stack_capregs - (uint64_t)threads->sbox->base;
+        memcpy(stack_capregs, &resp.contexts[i].cap_regs, capreg_size);
+        dlog("monitor: uctx->uc_mcontext.mc_capregs=%p\n", stack_uctx->uc_mcontext.mc_capregs);
+
+        // threads[i + 1].uctx = (uint64_t)stack_uctx - (uint64_t)threads->sbox->base;
+    };
+    dlog("monitor: notify_other_thread_save finish.\n");
 }
+
+// void save_sig_handler(int j, siginfo_t *si, ucontext_t *uap)
+// {
+//     printf("trap %d\n", j);
+//     printf("SI_ADDR: %ld\n", si->si_addr);
+
+//     struct c_thread *cur_thread = get_cur_thread();
+//     cur_thread->uctx = uap;
+
+//     destroy_carrie_thread(cur_thread->sbox->threads);
+// }
+
+// void setup_save_sig()
+// {
+//     struct sigaction sa;
+//     sa.sa_sigaction = save_sig_handler;
+//     sigemptyset(&sa.sa_mask);
+//     sa.sa_flags = SA_SIGINFO;
+
+//     if (sigaction(SIGSAVE, &sa, NULL) == -1)
+//     {
+//         perror("sigaction");
+//         exit(1);
+//     }
+// }

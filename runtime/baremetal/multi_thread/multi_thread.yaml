@@ -17,6 +17,7 @@ cVMs:
     end: 0x30000000
   callback_out: monitor
   wait: -1
+  fork: 1
 
 - name: hello2
   runtime: libhello.so
@@ -27,3 +28,4 @@ cVMs:
     end: 0x40000000
   callback_out: monitor
   wait: -1
+  fork: 1

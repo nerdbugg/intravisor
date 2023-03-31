@@ -74,6 +74,7 @@ int argc, char *argv[]
         dlog("encl_map.ret = %p\n", encl_map.ret_point);
     }
 
+    cvms[cid].host_exit_addr = (uint64_t)encl_map.host_exit;
     if (encl_map.cap_relocs)
     {
         printf("we have __cap_relocs, it is a purecap binary\n");
@@ -220,6 +221,7 @@ int gen_caps(struct s_box *cvm, struct c_thread *ct)
 void *init_thread(int cid)
 {
     struct c_thread *me = &cvms[cid].threads[0];
+    thr_self(&me->task_id);
     // assert(me->sbox != 0);
     void *sp_read = me->stack + me->stack_size; // getSP(); = 0x2ff80000 + 524288 = 0x3000 0000 = cmp_end
     char argv1[128];

@@ -156,6 +156,7 @@ void *c_thread_body(void *carg) {
 
 	me->m_tp = getTP();
 	me->c_tp = (void *)(me->stack+4096);
+	thr_self(&me->task_id);
 
 //	printf("me->func = %p, addr=%p, sp = %p\n", me->func, addr, getSP());
 

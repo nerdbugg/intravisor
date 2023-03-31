@@ -6,6 +6,7 @@
 #include "cvm/log.h"
 
 struct s_box	cvms[MAX_CVMS];
+int send_req, receive_resp;
 
 //default config
 int timers = 0;
@@ -33,6 +34,7 @@ void sig_handler(int j, siginfo_t *si, void *uap) {
 	mcontext_t *mctx = &((ucontext_t *)uap)->uc_mcontext;
 	printf("trap %d\n", j);
 	printf("SI_ADDR: %ld\n", si->si_addr);
+	printf("SI_PC_ADDR: %lx\n", mctx->mc_gpregs.gp_sepc);
 
 #ifdef SIM 
 	printf("not implemented, linux has different mcontext\n");
@@ -98,7 +100,7 @@ void setup_segv_sig() {
 
 void setup_sig() {
 	setup_segv_sig();
-	setup_save_sig();
+	// setup_save_sig();
 }
 
 void parse_cmdline(char *argv[], const char *disk_img, const char *runtime_so, char **yaml_cfg, int *skip_argc) {
@@ -217,7 +219,7 @@ int link_cvm(struct cvm *flist) {
 	}
 }
 
-int main(int argc, char *argv[]) {
+int monitor_main(int argc, char *argv[]) {
 //	printf("hello world %d %s\n", argc, argv[1]);
 	starttime = get_ms_timestamp();
 	char *disk_img = "./disk.img";
@@ -265,4 +267,30 @@ int main(int argc, char *argv[]) {
 	}
 	printf("all cvm exit, monitor exit.\n");
 	return 0;
+}
+
+int main(int argc, char *argv[]) { 
+	pid_t pid;
+	int req_pipe[2];
+	int resp_pipe[2];
+
+	if (pipe(req_pipe) != 0) {
+		printf("pipe failed\n");
+		exit(1);
+	};
+
+	if (pipe(resp_pipe) != 0) {
+		printf("pipe failed\n");
+		exit(1);
+	};
+
+	pid = fork();
+	if (pid == 0) {
+		send_req = req_pipe[1];
+		receive_resp = resp_pipe[0];
+		monitor_main(argc, argv);
+		close(req_pipe[0]);
+	} else {
+		daemon_main(pid, req_pipe[0], resp_pipe[1]);
+	}
 }

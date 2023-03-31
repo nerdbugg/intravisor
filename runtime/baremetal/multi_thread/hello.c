@@ -4,9 +4,13 @@
 
 #define MSG "checkpoint test with multi-thread... \n"
 
+void sig_handler() {
+	host_save();
+}
+
 void print_a()
 {
-	for (int i = 0; i < 100; i++)
+	for (int i = 0; i < 1500; i++)
 	{
 		host_write("a", 1);
 	}
@@ -20,9 +24,10 @@ void print_a()
 void print_b()
 {
 	// host_signal(sig_handler);
-	for (int i = 0; i < 200; i++)
+	// for (int i = 0; i < 200; i++)
+	for (;;)
 	{
-		host_write("b", 1);
+		// host_write("b", 1);
 	}
 	host_exit();
 }
@@ -30,9 +35,9 @@ void print_b()
 void print_c()
 {
 	// host_signal(sig_handler);
-	for (int i = 0; i < 200; i++)
+	for (;;)
 	{
-		host_write("c", 1);
+		// host_write("c", 1);
 	}
 	host_exit();
 }

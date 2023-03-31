@@ -51,6 +51,7 @@
 #include "lkl_wrap/lkl_host.h"
 
 #include <stdbool.h>
+#include <sys/reg.h>
 
 #include "intravisor.h"
 #include "tfork.h"
@@ -182,6 +183,7 @@ struct c_thread {
 	char **argv;
 
 	pthread_t tid;
+	int task_id; // the id obtained by thr_self. 
 	pthread_attr_t tattr;
 
 	struct s_box *sbox;
@@ -189,7 +191,8 @@ struct c_thread {
 	struct stream_caps_store *cs;
 	struct cvm_tmplt_ctx ctx;
 	bool notified;
-	ucontext_t *uctx;
+	ucontext_t uctx;
+	struct capreg cap_regs;
 };
 
 struct cs_lock {
@@ -254,6 +257,7 @@ struct s_box {
 	int t_cid;
 	int fork;
 	int use_tfork;
+	uint64_t host_exit_addr;
 };
 
 
@@ -335,3 +339,5 @@ struct cap_relocs_s {
 };
 
 #endif
+
+int daemon_main(int, int, int);
