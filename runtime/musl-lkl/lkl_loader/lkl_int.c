@@ -116,6 +116,15 @@ void wrap_thread_exit() {
 	__asm__ __volatile__("jal c_out" : "=r"(a0) : "r"(t5) : "memory" );
 }
 
+// temporarily add for monitor loader logic
+//13	void (*host_exit)(void);
+void host_exit() {
+	int tmp = 13;
+	register long a0 __asm__("a0");
+	register long t5 __asm__("t5") = tmp;
+	__asm__ __volatile__("jal c_out" : "=r"(a0) : "r"(t5) : "memory" );
+}
+
 //14	int (*thread_join)(lkl_thread_t tid);
 int wrap_thread_join(long tid) {
 	int tmp = 14;
@@ -306,6 +315,17 @@ int wrap_get_capacity(void *disk, void *res) {
 	__asm__ __volatile__("jal c_out" : "=r"(a0) : "r"(t5), "r"(a0), "r"(a1) : "memory" );
 	return (int) a0;
 }
+
+// void host_save()
+void wrap_host_save()
+{
+	int tmp = 115;
+	register long a0 __asm__("a0");
+	register long t5 __asm__("t5") = tmp;
+
+	__asm__ __volatile__("jal c_out" : "=r"(a0) : "r"(t5), "r"(a0) : "memory");
+}
+
 /// network 
 
 int wrap_tx(struct lkl_netdev *nd, struct iovec *iov, int cnt) {
@@ -906,6 +926,9 @@ extern void *mount_thread(void *arg);
 
 	pthread_join(mount);
 #else
+	// generate snapshot
+	//wrap_host_save();
+
 	mount_thread(&m_args);
 #endif
 	lkl_printf("MOUNT DONE\n");
