@@ -33,8 +33,8 @@ extern void cinv(void *, void *);
 void sig_handler(int j, siginfo_t *si, void *uap) {
 	mcontext_t *mctx = &((ucontext_t *)uap)->uc_mcontext;
 	printf("trap %d\n", j);
-	printf("SI_ADDR: %ld\n", si->si_addr);
-	printf("SI_PC_ADDR: %lx\n", mctx->mc_gpregs.gp_sepc);
+	printf("SI_ADDR: 0x%lx\n", si->si_addr);
+	printf("SI_PC_ADDR: 0x%lx\n", mctx->mc_gpregs.gp_sepc);
 
 #ifdef SIM 
 	printf("not implemented, linux has different mcontext\n");
@@ -49,18 +49,27 @@ void sig_handler(int j, siginfo_t *si, void *uap) {
 	__register_t gp_sepc = mctx->mc_gpregs.gp_sepc;
 	__register_t gp_sstatus = mctx->mc_gpregs.gp_sstatus;
 
-	printf("ra = %lx, sp = %lx, gp = %lx, tp = %lx, gp_sepc = %p, gp_status = %p\n", ra, sp, gp, tp, gp_sepc, gp_sstatus);
+	printf("ra = 0x%lx, sp = 0x%lx, gp = 0x%lx, tp = 0x%lx, gp_sepc = %p, gp_status = %p\n", ra, sp, gp, tp, gp_sepc, gp_sstatus);
 	for(int i = 0; i < 7; i++) {
-		printf("gp_t[%d]\t%lx\n", i, t[i]);
+		printf("gp_t[%d]\t0x%lx\n", i, t[i]);
 	}
 
 	for(int i = 0; i < 12; i++) {
-		printf("gp_s[%d]\t%lx\n", i, s[i]);
+		printf("gp_s[%d]\t0x%lx\n", i, s[i]);
 	}
 
 	for(int i = 0; i < 8; i++) {
-		printf("gp_a[%d]\t%lx\n", i, a[i]);
+		printf("gp_a[%d]\t0x%lx\n", i, a[i]);
 	}
+
+	int sepcc_offset = (4+7+12+8)*16;
+	int ddc_offset = (4+7+12+8+1)*16;
+
+	log("sepcc:\n");
+	CHERI_CAP_PRINT(*(void* __capability*)(mctx->mc_capregs+sepcc_offset));
+	log("ddc:\n");
+	CHERI_CAP_PRINT(*(void* __capability*)(mctx->mc_capregs+ddc_offset));
+
 #endif
 	printf("program receive trap signal, press Ctrl+c to exit.\n");
 	while(1);
