@@ -61,7 +61,7 @@ ${OBJDIR} :
 	mkdir $@
 
 monitor : ${OBJDIR} 
-	$(CC_MON) $(CC_MON_FLAGS) -static -ldl -lrt -lm -lpthread -o ${OBJDIR}/monitor ${obj.c} ${obj.S} 
+	$(CC_MON) $(CC_MON_FLAGS) -ldl -lrt -lm -lpthread -o ${OBJDIR}/monitor ${obj.c} ${obj.S} 
 
 clean:
 	rm -rf ${OBJDIR}
