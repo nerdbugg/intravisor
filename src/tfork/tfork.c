@@ -142,7 +142,7 @@ void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
     // printf("save status = %d\n", status);
     // __asm__ __volatile__("sd sp, %0" :"=m" (cur_sp) :: "memory");
 
-    dlog("sp is %x; ra is %x;\n", cur_sp, cur_ra);
+    dlog("sp is %p; ra is %p;\n", cur_sp, cur_ra);
 
     // cur_thread->ctx.s0 = cur_sp;
     // cur_thread->ctx.ra = cur_ra;

@@ -3,10 +3,10 @@
 #include <pthread.h>
 #include <string.h>
 
-#include <machine/reg.h>
 #include <sys/types.h>
-#include <sys/ptrace.h>
 #include <sys/wait.h>
+#include <sys/ptrace.h>
+#include <machine/reg.h>
 
 #include "cvm/log.h"
 #include "monitor.h"
