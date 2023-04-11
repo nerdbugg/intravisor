@@ -382,6 +382,8 @@ struct c_thread *get_cur_thread() {
 long hostcall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, long a7) {
 	long t5 = (long) getT5();
 
+	int cid = (long) getSP() / 0x10000000;
+	int ct_id = (cvms[cid].cmp_end - (((long) getSP() / STACK_SIZE)*STACK_SIZE))/STACK_SIZE - 1;
 	struct c_thread *ct = get_cur_thread();
 	ct->c_tp = getTP();
 	__asm__ __volatile__("mv tp, %0;" :: "r"(ct->m_tp) : "memory");
@@ -429,7 +431,7 @@ long hostcall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, lon
 			lkl_host_ops.thread_detach();
 			break;
 		case 13:
-			printf("cvm(cid=%d) called host_exit, running %ldms\n", sboxptr_to_cid(ct->sbox) , get_ms_timestamp() - ct->sbox->start_time);
+			printf("cvm(cid=%d,thread=%d) called host_exit, running %ldms\n", sboxptr_to_cid(ct->sbox), ct_id, get_ms_timestamp() - ct->sbox->start_time);
 			destroy_carrie_thread(ct->sbox->threads);
 			break;
 		case 14:

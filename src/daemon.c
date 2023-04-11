@@ -1,11 +1,16 @@
 #include <stdlib.h>
-#include <daemon.h>
 #include <signal.h>
 #include <pthread.h>
 #include <string.h>
+
+#include <machine/reg.h>
+#include <sys/types.h>
+#include <sys/ptrace.h>
 #include <sys/wait.h>
 
 #include "cvm/log.h"
+#include "monitor.h"
+#include "daemon.h"
 
 int monitor_pid;
 
@@ -36,10 +41,19 @@ int handler(snapshot_req_t *req, snapshot_resp_t *resp)
             dlog("daemon: PT_GETREGS failed.\n");
         }
         dlog("daemon: sub_threads[%d] pc=%p\n", i, resp->contexts[i].gp_regs.sepc);
+        dlog("daemon: sub_threads[%d] sp=%p\n", i, resp->contexts[i].gp_regs.sp);
+
         if (ptrace(PT_GETCAPREGS, tid, &resp->contexts[i].cap_regs, 0) != 0)
         {
             dlog("daemon: PT_GETCAPREGS failed.\n");
         }
+        dlog("daemon: sub_threads[%d] ddc:", i);
+        CHERI_CAP_PRINT(resp->contexts[i].cap_regs.ddc);
+        dlog("daemon: sub_threads[%d] sepcc:", i);
+        CHERI_CAP_PRINT(resp->contexts[i].cap_regs.sepcc);
+        
+        // todo: terminate the thread according to the ddc mode 
+        // (host_exit or destroy_carrie_thread)
         memcpy(&new_regs, &resp->contexts[i].gp_regs, sizeof(struct reg));
         new_regs.sepc = req->host_exit_addr;
         ptrace(PT_SETREGS, tid, &new_regs, 0);
@@ -68,6 +82,9 @@ int daemon_main(int child_pid, int req_pipe, int resp_pipe)
         handler(&req, &resp);
         dlog("daemon: ready to send snapshot response! fd=%d\n", resp_pipe);
         write(resp_pipe, &resp, sizeof(resp));
+
+        printf("Hit Here\n");
+
         waitid(P_PID, monitor_pid, &info, WSTOPPED | WEXITED);
         dlog("daemon: monitor crash! receive wait val\n");
         dlog("si_signo=%p, si_code=%p, si_addr=%p, si_status=%d\n", info.si_signo, info.si_code, info.si_addr, info.si_status);

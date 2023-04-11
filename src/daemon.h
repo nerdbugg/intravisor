@@ -1,3 +1,7 @@
+#ifndef DAEMON_H
+#define DAEMON_H
+
+#include <machine/ucontext.h>
 #include <sys/ptrace.h>
 
 #ifndef MAX_THREADS
@@ -23,3 +27,5 @@ typedef struct snapshot_resp
         struct capreg cap_regs;
     } contexts[MAX_THREADS];
 } snapshot_resp_t;
+
+#endif
