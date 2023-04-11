@@ -12,7 +12,6 @@
 #include "monitor.h"
 #include "tfork.h"
 #include "cvm/log.h"
-#include "assert.h"
 #include "daemon.h"
 
 #define SIGSAVE SIGUSR1
@@ -152,6 +151,7 @@ void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
     destroy_carrie_thread(cur_thread->sbox->threads);
 }
 
+// note: restore main thread of cvm (from half of tp_write function)
 void gen_caps_restored(struct c_thread *target_thread)
 {
     target_thread->m_tp = getTP();
@@ -161,9 +161,11 @@ void gen_caps_restored(struct c_thread *target_thread)
     struct cvm_tmplt_ctx *ctx = &target_thread->ctx;
     struct s_box *t_cvm = &cvms[cvm->t_cid];
 
+    // note: initialize the prev_s0(sp)
     void *prev_s0 = (void *)(*(uint64_t *)(ctx->s0 - 16) + 112);
-    void *__capability *caps = prev_s0 - 3 * sizeof(void *__capability);
+    prev_s0 = mon_to_comp(prev_s0, t_cvm);
 
+    void *__capability *caps = prev_s0 - 3 * sizeof(void *__capability);
     void *ret_comp_pc = cheri_getoffset(caps[2]);
     printf("thread[tid=%x], ret_from_mon's address is 0x%x\n", target_thread->tid, ret_comp_pc);
     void *__capability ret_comp_pcc = codecap_create(cvm->cmp_begin, cvm->cmp_end);
@@ -179,6 +181,8 @@ void gen_caps_restored(struct c_thread *target_thread)
         while (1)
             ;
     }
+
+    // note: write caps to local_cap_store region
     void *__capability *local_cap_store = comp_to_mon(0xe001000, cvm);
     void *__capability *comp_ddc = ((uint64_t)local_cap_store) + 2 * sealcap_size;
     void *__capability *sealed_pcc = ((uint64_t)local_cap_store) + 11 * sealcap_size;
@@ -186,7 +190,6 @@ void gen_caps_restored(struct c_thread *target_thread)
     *sealed_pcc = cheri_seal(ret_comp_pcc, sealcap);
     *sealed_ddc = cheri_seal(ret_comp_dcap, sealcap);
     *comp_ddc = datacap_create((void *)cvm->cmp_begin, (void *)cvm->cmp_end);
-    prev_s0 = mon_to_comp(prev_s0, t_cvm);
 
     dlog("gen_caps_restored: sealed_pcc \n");
     CHERI_CAP_PRINT(*sealed_pcc);
@@ -195,6 +198,7 @@ void gen_caps_restored(struct c_thread *target_thread)
     dlog("gen_caps_restored: comp_ddc \n");
     CHERI_CAP_PRINT(*comp_ddc);
 
+    // note: restore sp register and cinvoke to the ret_from_monitor
     __asm__ __volatile__(
         "ld sp, %0;"
         "lc ct0, %1;"
@@ -205,6 +209,7 @@ void gen_caps_restored(struct c_thread *target_thread)
         "m"(*sealed_pcc), "m"(*sealed_ddc), "m"(*comp_ddc));
 }
 
+// note: start a new thread from template ucontext
 long load_ucontext(struct c_thread *target_thread)
 {
     ucontext_t *uctx;
@@ -220,30 +225,31 @@ long load_ucontext(struct c_thread *target_thread)
     target_thread->c_tp = (void *)(target_thread->stack + 4096);
 
     dlog("monitor: load_ucontext, thread.uctx=%p\n", target_thread->uctx);
-    // uctx = (uint64_t)target_thread->uctx + (uint64_t)target_thread->sbox->base;
     uctx = &target_thread->uctx;
+
+    // note: change tp
     uctx->uc_mcontext.mc_gpregs.gp_tp = target_thread->c_tp;
     dlog("monitor: load_ucontext, sbox->base=0x%x, ucontext addr=0x%x\n", target_thread->sbox->base, uctx);
-    // cap_regs = uctx->uc_mcontext.mc_capregs + (uint64_t)target_thread->sbox->base;
-    cap_regs = &target_thread->cap_regs;
-    uctx->uc_mcontext.mc_capregs = cap_regs;
 
+    // note: initialize the cap_regs
+    cap_regs = &target_thread->cap_regs;
     void *__capability ret_comp_pcc = codecap_create(t_cvm->cmp_begin, t_cvm->cmp_end);
     ret_comp_pcc = cheri_setaddress(ret_comp_pcc, (uint64_t)uctx->uc_mcontext.mc_gpregs.gp_sepc);
     void *__capability ret_comp_dcap = datacap_create(t_cvm->cmp_begin, (void *)t_cvm->cmp_end);
 
     void *__capability *sealed_pcc = &cap_regs->sepcc;
     void *__capability *sealed_ddc = &cap_regs->ddc;
-
     sealcap_size = sizeof(sealcap);
     if (sysctlbyname("security.cheri.sealcap", &sealcap, &sealcap_size, NULL, 0) < 0)
     {
         printf("sysctlbyname(security.cheri.sealcap)\n");
         exit(1);
     }
-
     *sealed_pcc = cheri_seal(ret_comp_pcc, sealcap);
     *sealed_ddc = cheri_seal(ret_comp_dcap, sealcap);
+
+    // note: change mc_capregs
+    uctx->uc_mcontext.mc_capregs = cap_regs;
 
     setcontext(uctx);
 }
@@ -351,6 +357,7 @@ void notify_other_thread_save(struct c_thread *cur_thread)
     read(receive_resp, &resp, sizeof(resp));
     dlog("monitor: receive snapshot response.\n");
 
+    // generate ucontext from ptrace result
     for (i = 0; i < MAX_THREADS; i++)
     {
         sp = resp.contexts[i].gp_regs.sp;
