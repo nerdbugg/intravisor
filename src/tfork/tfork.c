@@ -152,6 +152,7 @@ void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
 }
 
 // note: restore main thread of cvm (from half of tp_write function)
+// TODO: restore threads in two mode
 void gen_caps_restored(struct c_thread *target_thread)
 {
     target_thread->m_tp = getTP();
@@ -345,6 +346,7 @@ void notify_other_thread_save(struct c_thread *cur_thread)
         dlog("monitor: threads[%d].tid=%d\n", i, threads[i].task_id);
         req.sub_threads[i - 1].task_id = threads[i].task_id;
         req.sub_threads[i - 1].pthread_id = threads[i].tid;
+        req.sub_threads[i - 1].ct = &(threads[i]);
     }
     if (i == 1)
     {

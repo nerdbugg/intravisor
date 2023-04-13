@@ -14,6 +14,7 @@ typedef struct snapshot_req
     {
         int pthread_id;
         int task_id;
+        void* ct;
     } sub_threads[MAX_THREADS];
     pthread_t main_thread_id;
     uint64_t host_exit_addr;

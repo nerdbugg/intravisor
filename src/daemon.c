@@ -14,6 +14,9 @@
 
 int monitor_pid;
 
+// hostcall.c
+extern void destroy_carrie_thread(struct c_thread *ct);
+
 int handler(snapshot_req_t *req, snapshot_resp_t *resp)
 {
     int ret, i, val;
@@ -52,10 +55,18 @@ int handler(snapshot_req_t *req, snapshot_resp_t *resp)
         dlog("daemon: sub_threads[%d] sepcc:", i);
         CHERI_CAP_PRINT(resp->contexts[i].cap_regs.sepcc);
         
-        // todo: terminate the thread according to the ddc mode 
-        // (host_exit or destroy_carrie_thread)
         memcpy(&new_regs, &resp->contexts[i].gp_regs, sizeof(struct reg));
-        new_regs.sepc = req->host_exit_addr;
+        // terminate the thread according to the ddc mode 
+        // (host_exit or destroy_carrie_thread)
+        unsigned long ddc_base = cheri_getbase(resp->contexts[i].cap_regs.ddc);
+        if(ddc_base>0) { // compart mode
+            new_regs.sepc = req->host_exit_addr;
+        } else { // monitor mode 
+            // pass parameter here
+            // get struct c_thread* ct as parameter
+            new_regs.a[0] = req->sub_threads[i].ct;
+            new_regs.sepc = destroy_carrie_thread;
+        }
         ptrace(PT_SETREGS, tid, &new_regs, 0);
         // kill(tid, 9);
     }
