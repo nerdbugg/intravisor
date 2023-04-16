@@ -162,11 +162,9 @@ void gen_caps_restored(struct c_thread *target_thread)
     struct cvm_tmplt_ctx *ctx = &target_thread->ctx;
     struct s_box *t_cvm = &cvms[cvm->t_cid];
 
-    // note: initialize the prev_s0(sp)
     void *prev_s0 = (void *)(*(uint64_t *)(ctx->s0 - 16) + 112);
-    prev_s0 = mon_to_comp(prev_s0, t_cvm);
-
     void *__capability *caps = prev_s0 - 3 * sizeof(void *__capability);
+    
     void *ret_comp_pc = cheri_getoffset(caps[2]);
     printf("thread[tid=%x], ret_from_mon's address is 0x%x\n", target_thread->tid, ret_comp_pc);
     void *__capability ret_comp_pcc = codecap_create(cvm->cmp_begin, cvm->cmp_end);
@@ -199,6 +197,9 @@ void gen_caps_restored(struct c_thread *target_thread)
     dlog("gen_caps_restored: comp_ddc \n");
     CHERI_CAP_PRINT(*comp_ddc);
 
+    // note: initialize the sp
+    void *sp = mon_to_comp(prev_s0, t_cvm);
+
     // note: restore sp register and cinvoke to the ret_from_monitor
     __asm__ __volatile__(
         "ld sp, %0;"
@@ -206,7 +207,7 @@ void gen_caps_restored(struct c_thread *target_thread)
         "lc ct1, %2;"
         "lc ct2, %3;"
         "cspecialw ddc, ct2;"
-        "CInvoke ct0, ct1;" ::"m"(prev_s0),
+        "CInvoke ct0, ct1;" ::"m"(sp),
         "m"(*sealed_pcc), "m"(*sealed_ddc), "m"(*comp_ddc));
 }
 
