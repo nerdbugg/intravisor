@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <ucontext.h>
 #include <machine/ucontext.h>
+#include <machine/reg.h>
 
 #include "monitor.h"
 #include "tfork.h"
@@ -17,6 +18,10 @@
 #define SIGSAVE SIGUSR1
 #define RET_COMP_PPC (16 * 11)
 #define RET_COMP_DDC (16 * 12)
+
+#define offsetof(type, field) __offsetof(type, field)
+// borrowed from CheriBSD freebsd64_machdep.c
+#define	CONTEXT64_GPREGS	(offsetof(struct gpregs, gp_sepc) / sizeof(register_t))
 
 const int TFORK_FAILED = MAP_FAILED;
 const static int tfork_syscall_num = 577;
@@ -216,8 +221,7 @@ long load_ucontext(struct c_thread *target_thread)
 {
     ucontext_t *uctx;
     struct s_box *cvm, *t_cvm;
-    struct capreg *cap_regs;
-    void *__capability sealcap;
+    struct capregs mc_capregs;
     size_t sealcap_size;
 
     cvm = target_thread->sbox;
@@ -226,32 +230,36 @@ long load_ucontext(struct c_thread *target_thread)
     target_thread->m_tp = getTP();
     target_thread->c_tp = (void *)(target_thread->stack + 4096);
 
-    dlog("monitor: load_ucontext, thread.uctx=%p\n", target_thread->uctx);
     uctx = &target_thread->uctx;
 
-    // note: change tp
+    // change tp (gpregs)
     uctx->uc_mcontext.mc_gpregs.gp_tp = target_thread->c_tp;
     dlog("monitor: load_ucontext, sbox->base=0x%x, ucontext addr=0x%x\n", target_thread->sbox->base, uctx);
+    // change sepc (gpregs)
+    register_t sepc = uctx->uc_mcontext.mc_gpregs.gp_sepc;
+    sepc = sepc - t_cvm->cmp_begin; // cap-relative
+    uctx->uc_mcontext.mc_gpregs.gp_sepc = sepc;
 
-    // note: initialize the cap_regs
-    cap_regs = &target_thread->cap_regs;
-    void *__capability ret_comp_pcc = codecap_create(t_cvm->cmp_begin, t_cvm->cmp_end);
-    ret_comp_pcc = cheri_setaddress(ret_comp_pcc, (uint64_t)uctx->uc_mcontext.mc_gpregs.gp_sepc);
-    void *__capability ret_comp_dcap = datacap_create(t_cvm->cmp_begin, (void *)t_cvm->cmp_end);
-
-    void *__capability *sealed_pcc = &cap_regs->sepcc;
-    void *__capability *sealed_ddc = &cap_regs->ddc;
-    sealcap_size = sizeof(sealcap);
-    if (sysctlbyname("security.cheri.sealcap", &sealcap, &sealcap_size, NULL, 0) < 0)
-    {
-        printf("sysctlbyname(security.cheri.sealcap)\n");
-        exit(1);
+    // initialize mc_capregs using mc_gpregs
+    uintcap_t *creg=(uintcap_t *)&mc_capregs;
+    register_t *greg=(register_t *)&uctx->uc_mcontext.mc_gpregs;
+    for(int i=0;i<CONTEXT64_GPREGS;i++) {
+        creg[i] = (uintcap_t)greg[i];
     }
-    *sealed_pcc = cheri_seal(ret_comp_pcc, sealcap);
-    *sealed_ddc = cheri_seal(ret_comp_dcap, sealcap);
+    // TODO: consider the monitor mode(ddc.base=0) thread
+    // change sepcc
+    // cooerate with sepc, the final sepcc = cheri_setoffset(cp_sepcc, sepc)
+    void *__capability cp_sepcc = codecap_create(cvm->cmp_begin, cvm->cmp_end);
+    // change ddc
+    void *__capability cp_ddc = datacap_create(cvm->cmp_begin, (void *)cvm->cmp_end);
+    mc_capregs.cp_sepcc = cp_sepcc;
+    mc_capregs.cp_ddc = cp_ddc;
+    mc_capregs.cp_sstatus = uctx->uc_mcontext.mc_gpregs.gp_sstatus;
 
-    // note: change mc_capregs
-    uctx->uc_mcontext.mc_capregs = cap_regs;
+    // note: change mc_capregs and set flag
+    uctx->uc_mcontext.mc_capregs = &mc_capregs;
+    // note: would use mc_capregs(add sepc) to set new context
+    uctx->uc_mcontext.mc_flags = _MC_CAP_VALID;
 
     setcontext(uctx);
 }
@@ -302,19 +310,22 @@ void load_all_thread(int cid)
     int t_cid = me->sbox->t_cid;
     struct c_thread *t_me = cvms[t_cid].threads;
 
+    // note: initialize all sub-threads
     for (int i = 1; i < 63; i++)
     {
-        dlog("monitor: load_all_thread, t_me[%d].uctx=%p\n", i, t_me[i].uctx);
         if (t_me[i].uctx.uc_mcontext.mc_gpregs.gp_sp == NULL)
         {
             break;
         }
+        dlog("monitor: load_all_thread, t_me[%d].uctx=%p\n", i, t_me[i].uctx);
+
         memcpy(&me[i], &t_me[i], sizeof(struct c_thread));
         me[i].sbox = cvm;
         printf("derived cvm has sub-thread, i=%d\n", i);
         load_sub_thread(&me[i], &t_me[i]);
     }
 
+    // note: restore main thread of cvm
     gen_caps_restored(me);
 }
 

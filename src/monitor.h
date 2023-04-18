@@ -52,6 +52,7 @@
 
 #include <stdbool.h>
 #include <sys/reg.h>
+#include <machine/reg.h>
 
 #include "intravisor.h"
 #include "tfork.h"
