@@ -17,10 +17,9 @@ void print_a()
 
 	host_save();
 
-	for (int i = 0; i < 100; i++)
-	{
-		host_write("a", 1);
-	}
+	// note: loop for waiting sub-threads
+	// currently no pthread_join
+	while(1);
 }
 
 void print_b()
