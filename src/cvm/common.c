@@ -194,7 +194,7 @@ void create_and_start_cvm(struct cvm *f)
 
     }
 
-    // todo: maybe stack conflicts when exec load template.
+    // TODO: maybe stack conflicts when exec load template.
     if (cvm -> use_tfork)
     {
         ret = pthread_attr_setstack(&ct->tattr, ct->stack, ct->stack_size);

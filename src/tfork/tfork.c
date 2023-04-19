@@ -219,9 +219,9 @@ void gen_caps_restored(struct c_thread *target_thread)
 // note: start a new thread from template ucontext
 long load_ucontext(struct c_thread *target_thread)
 {
-    ucontext_t *uctx;
+    ucontext_t uctx;
     struct s_box *cvm, *t_cvm;
-    struct capregs mc_capregs;
+    struct capregs mc_capregs; // ucontext cap_regs
     size_t sealcap_size;
 
     cvm = target_thread->sbox;
@@ -230,38 +230,44 @@ long load_ucontext(struct c_thread *target_thread)
     target_thread->m_tp = getTP();
     target_thread->c_tp = (void *)(target_thread->stack + 4096);
 
-    uctx = &target_thread->uctx;
+    makecontext(&uctx, NULL, NULL);
+    // use gp_regs and cp_regs to initialize uctx.uc_mcontext ;
+    memcpy(&(uctx.uc_mcontext.mc_gpregs), &(target_thread->gp_regs), sizeof(struct reg));
+    memcpy(&mc_capregs, &(target_thread->cap_regs), sizeof(struct capreg));
+    mc_capregs.cp_sstatus = target_thread->gp_regs.sstatus;
 
-    // change tp (gpregs)
-    uctx->uc_mcontext.mc_gpregs.gp_tp = target_thread->c_tp;
-    dlog("monitor: load_ucontext, sbox->base=0x%x, ucontext addr=0x%x\n", target_thread->sbox->base, uctx);
-    // change sepc (gpregs)
-    register_t sepc = uctx->uc_mcontext.mc_gpregs.gp_sepc;
-    sepc = sepc - t_cvm->cmp_begin; // cap-relative
-    uctx->uc_mcontext.mc_gpregs.gp_sepc = sepc;
-
-    // initialize mc_capregs using mc_gpregs
-    uintcap_t *creg=(uintcap_t *)&mc_capregs;
-    register_t *greg=(register_t *)&uctx->uc_mcontext.mc_gpregs;
-    for(int i=0;i<CONTEXT64_GPREGS;i++) {
-        creg[i] = (uintcap_t)greg[i];
-    }
     // TODO: consider the monitor mode(ddc.base=0) thread
-    // change sepcc
-    // cooerate with sepc, the final sepcc = cheri_setoffset(cp_sepcc, sepc)
-    void *__capability cp_sepcc = codecap_create(cvm->cmp_begin, cvm->cmp_end);
-    // change ddc
-    void *__capability cp_ddc = datacap_create(cvm->cmp_begin, (void *)cvm->cmp_end);
-    mc_capregs.cp_sepcc = cp_sepcc;
-    mc_capregs.cp_ddc = cp_ddc;
-    mc_capregs.cp_sstatus = uctx->uc_mcontext.mc_gpregs.gp_sstatus;
+    void* __capability ddc=target_thread->cap_regs.ddc;
+    unsigned long base = cheri_getbase(ddc);
+    if (base==0x0) { // monitor
+        // change tp (gpregs, capregs)
+        uctx.uc_mcontext.mc_gpregs.gp_tp = target_thread->m_tp;
+        mc_capregs.cp_ctp = (uintptr_t)target_thread->m_tp;
+    } else { // compartment
+        // change tp (gpregs, capregs)
+        uctx.uc_mcontext.mc_gpregs.gp_tp = target_thread->c_tp;
+        mc_capregs.cp_ctp = (uintptr_t)target_thread->c_tp;
+        // change sepc (gpregs)
+        register_t sepc = uctx.uc_mcontext.mc_gpregs.gp_sepc;
+        sepc = sepc - t_cvm->cmp_begin; // cap-relative
+        uctx.uc_mcontext.mc_gpregs.gp_sepc = sepc;
+        // change sepcc (capregs)
+        // cooperate with sepc, the final sepcc = cheri_setoffset(cp_sepcc, sepc)
+        void *__capability cp_sepcc = codecap_create(cvm->cmp_begin, cvm->cmp_end);
+        // change ddc (capregs)
+        void *__capability cp_ddc = datacap_create(cvm->cmp_begin, (void *)cvm->cmp_end);
+        mc_capregs.cp_sepcc = cp_sepcc;
+        mc_capregs.cp_ddc = cp_ddc;
+    }
 
-    // note: change mc_capregs and set flag
-    uctx->uc_mcontext.mc_capregs = &mc_capregs;
+    dlog("monitor: load_ucontext, &ucontext=%p, &mc_capregs=%p\n", &uctx, &mc_capregs);
+
+    // note: set mc_capregs and set flag
+    uctx.uc_mcontext.mc_capregs = &mc_capregs;
     // note: would use mc_capregs(add sepc) to set new context
-    uctx->uc_mcontext.mc_flags = _MC_CAP_VALID;
+    uctx.uc_mcontext.mc_flags = _MC_CAP_VALID;
 
-    setcontext(uctx);
+    setcontext(&uctx);
 }
 
 long load_sub_thread(struct c_thread *ct, struct c_thread *t_ct)
@@ -275,6 +281,7 @@ long load_sub_thread(struct c_thread *ct, struct c_thread *t_ct)
             ;
     }
 
+    // TODO: change thread stack here? Does the fini execution correctly?
     ret = pthread_attr_setstack(&ct->tattr, ct->stack, ct->stack_size);
     if (ret != 0)
     {
@@ -290,7 +297,6 @@ long load_sub_thread(struct c_thread *ct, struct c_thread *t_ct)
         printf("ret = %d\n", ret);
     }
 #endif
-    // TODO: need to add offset to registers relatived to pcc and ddc?
     ret = pthread_create(&ct->tid, &ct->tattr, load_ucontext, ct);
     if (ret != 0)
     {
@@ -313,15 +319,18 @@ void load_all_thread(int cid)
     // note: initialize all sub-threads
     for (int i = 1; i < 63; i++)
     {
-        if (t_me[i].uctx.uc_mcontext.mc_gpregs.gp_sp == NULL)
+        // note:global is initalize as zero
+        if (t_me[i].gp_regs.sp == NULL)
         {
             break;
         }
-        dlog("monitor: load_all_thread, t_me[%d].uctx=%p\n", i, t_me[i].uctx);
+        dlog("monitor: load_all_thread, t_me[%d]\n", i);
 
         memcpy(&me[i], &t_me[i], sizeof(struct c_thread));
         me[i].sbox = cvm;
-        printf("derived cvm has sub-thread, i=%d\n", i);
+        // change stack
+        me[i].stack = t_me[i].stack - t_me->sbox->base + cvm->base;
+        dlog("derived cvm has sub-thread, i=%d\n", i);
         load_sub_thread(&me[i], &t_me[i]);
     }
 
@@ -337,11 +346,10 @@ void notify_other_thread_save(struct c_thread *cur_thread)
     struct c_thread *threads;
     snapshot_req_t req;
     snapshot_resp_t resp;
-    ucontext_t *stack_uctx;
+
+    ucontext_t uctx;
     struct capregs *stack_capregs;
 
-    capreg_size = sizeof(struct capregs);
-    dlog("monitor: capreg_size=%d\n", capreg_size);
     threads = cur_thread->sbox->threads;
     assert(cur_thread == threads);
 
@@ -367,57 +375,22 @@ void notify_other_thread_save(struct c_thread *cur_thread)
 
     dlog("monitor: ready to send snapshot req. fd=%d\n", send_req);
     write(send_req, &req, sizeof(req));
+
     dlog("monitor: ready to read snapshot response. fd=%d\n", receive_resp);
     read(receive_resp, &resp, sizeof(resp));
     dlog("monitor: receive snapshot response.\n");
 
-    // generate ucontext from ptrace result
+    // save ptrace result
     for (i = 0; i < MAX_THREADS; i++)
     {
-        sp = resp.contexts[i].gp_regs.sp;
+        sp = (void*)resp.contexts[i].gp_regs.sp;
         if (sp == NULL)
         {
             break;
         }
-        sp += (uint64_t)cur_thread->sbox->base;
 
-        stack_uctx = &threads[i + 1].uctx;
-        stack_capregs = &threads[i + 1].cap_regs;
-        // must align to 16 Bytes.
-        // stack_capregs = ((uint64_t)stack_uctx - capreg_size) & (~16 + 1);
-
-        makecontext(stack_uctx, 0, 0);
-        memcpy(&stack_uctx->uc_mcontext.mc_gpregs, &resp.contexts[i].gp_regs, sizeof(struct reg));
-        stack_uctx->uc_mcontext.mc_capregs = (uint64_t)stack_capregs - (uint64_t)threads->sbox->base;
-        memcpy(stack_capregs, &resp.contexts[i].cap_regs, capreg_size);
-        dlog("monitor: uctx->uc_mcontext.mc_capregs=%p\n", stack_uctx->uc_mcontext.mc_capregs);
-
-        // threads[i + 1].uctx = (uint64_t)stack_uctx - (uint64_t)threads->sbox->base;
+        threads[i+1].gp_regs = resp.contexts[i].gp_regs;
+        threads[i+1].cap_regs = resp.contexts[i].cap_regs;
     };
     dlog("monitor: notify_other_thread_save finish.\n");
 }
-
-// void save_sig_handler(int j, siginfo_t *si, ucontext_t *uap)
-// {
-//     printf("trap %d\n", j);
-//     printf("SI_ADDR: %ld\n", si->si_addr);
-
-//     struct c_thread *cur_thread = get_cur_thread();
-//     cur_thread->uctx = uap;
-
-//     destroy_carrie_thread(cur_thread->sbox->threads);
-// }
-
-// void setup_save_sig()
-// {
-//     struct sigaction sa;
-//     sa.sa_sigaction = save_sig_handler;
-//     sigemptyset(&sa.sa_mask);
-//     sa.sa_flags = SA_SIGINFO;
-
-//     if (sigaction(SIGSAVE, &sa, NULL) == -1)
-//     {
-//         perror("sigaction");
-//         exit(1);
-//     }
-// }

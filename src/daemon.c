@@ -94,8 +94,6 @@ int daemon_main(int child_pid, int req_pipe, int resp_pipe)
         dlog("daemon: ready to send snapshot response! fd=%d\n", resp_pipe);
         write(resp_pipe, &resp, sizeof(resp));
 
-        printf("Hit Here\n");
-
         waitid(P_PID, monitor_pid, &info, WSTOPPED | WEXITED);
         dlog("daemon: monitor crash! receive wait val\n");
         dlog("si_signo=%p, si_code=%p, si_addr=%p, si_status=%d\n", info.si_signo, info.si_code, info.si_addr, info.si_status);
