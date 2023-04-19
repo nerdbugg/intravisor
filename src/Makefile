@@ -23,6 +23,12 @@ ifdef DEBUG
   CFLAGS += -DDEBUG
 endif
 
+# use make CONFIG=1 --ignore-errors to generate compile_commands.json
+ifdef CONFIG
+  CFLAGS += -include fake_header/cheri_builtin.h
+  # TODO: set a fake $(CC) rather than use --ignore-errors?
+endif
+
 target_c = ${OBJDIR}/$(patsubst %.c,%.o,$(notdir ${1})) 
 target_s = ${OBJDIR}/$(patsubst %.S,%.o,$(notdir ${1})) 
 obj.c :=
