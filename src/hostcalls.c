@@ -510,6 +510,9 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 //SAVE
 /// 
 		case 115:
+			// when cvm is configured fork:0, just return
+			if (!ct->sbox->fork)
+				break;
 			ct->notified = true;
 			if (ct == ct->sbox->threads) {
 				notify_other_thread_save(ct);
