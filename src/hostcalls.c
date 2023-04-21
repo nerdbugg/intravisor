@@ -2,6 +2,7 @@
 
 #include "monitor.h"
 #include "tfork.h"
+#include <assert.h>
 
 #define SIGSAVE SIGUSR1
 
@@ -222,6 +223,8 @@ void destroy_carrie_thread(struct c_thread *ct) {
   			pthread_mutex_unlock(&ct->sbox->ct_lock);
 //			printf("thread %d exited\n", i);
 			lkl_host_ops.thread_exit();
+			int res=munmap(ct->temp_stack, TEMP_STACK_SIZE);
+			assert(res==0);
 		}
 	}
     pthread_mutex_unlock(&ct->sbox->ct_lock);

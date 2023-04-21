@@ -166,6 +166,8 @@ struct lkl_dev_blk_ops {
 #endif
 #endif
 
+#define TEMP_STACK_SIZE (1<<12)
+
 
 struct c_thread {
 	void *func;
@@ -195,6 +197,8 @@ struct c_thread {
 	// ptrace reg type
 	struct reg gp_regs;
 	struct capreg cap_regs;
+	// temp stack pointer used in restoration
+	void* temp_stack;
 };
 
 struct cs_lock {

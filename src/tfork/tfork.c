@@ -292,7 +292,10 @@ long load_sub_thread(struct c_thread *ct, struct c_thread *t_ct)
     }
 
     // TODO: change thread stack here? Does the fini execution correctly?
-    ret = pthread_attr_setstack(&ct->tattr, ct->stack, ct->stack_size);
+    void* res=mmap(NULL, TEMP_STACK_SIZE, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
+    assert(res!=MAP_FAILED);
+    ct->temp_stack = res;
+    ret = pthread_attr_setstack(&ct->tattr, ct->temp_stack, TEMP_STACK_SIZE);
     if (ret != 0)
     {
         perror("pthread attr setstack");
@@ -338,7 +341,7 @@ void load_all_thread(int cid)
 
         memcpy(&me[i], &t_me[i], sizeof(struct c_thread));
         me[i].sbox = cvm;
-        // change stack
+        // change stack base addr
         me[i].stack = t_me[i].stack - t_me->sbox->base + cvm->base;
         // change func
         me[i].func = t_me[i].func - t_me->sbox->base + cvm->base;
