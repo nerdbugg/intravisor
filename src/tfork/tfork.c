@@ -276,6 +276,8 @@ long load_ucontext(struct c_thread *target_thread)
 
     dlog("monitor: load_ucontext, &ucontext=%p, &mc_capregs=%p\n", &uctx, &mc_capregs);
     dlog("sizeof(uctx)=%lu, sizeof(mc_capregs)=%lu\n", sizeof(ucontext_t), sizeof(struct capregs));
+    dlog("monitor: load_ucontext, sepc=%p, pcc.base=0x%lx\n", uctx.uc_mcontext.mc_gpregs.gp_sepc, cheri_getbase(mc_capregs.cp_sepcc));
+    dlog("monitor: load_ucontext, sp=%p, ddc.base=0x%lx\n", uctx.uc_mcontext.mc_gpregs.gp_sp, cheri_getbase(mc_capregs.cp_ddc));
 
     setcontext(&uctx);
 }

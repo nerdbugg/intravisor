@@ -4,14 +4,15 @@ include ../config.mak
 all:
 
 OBJDIR := build
-SRC_LKL := lkl_wrap/iomem.c lkl_wrap/jmp_buf.c lkl_wrap/posix-host.c lkl_wrap/virtio_net_fd.c hostcalls.c main.c utils.c host_cap_calls.c host_cap_files.c host_syscall_callbacs.c
+SRC_LKL := lkl_wrap/iomem.c lkl_wrap/jmp_buf.c lkl_wrap/posix-host.c lkl_wrap/virtio_net_fd.c main.c utils.c
 SRC_YAML := libyaml/src/api.c libyaml/src/dumper.c libyaml/src/emitter.c libyaml/src/loader.c libyaml/src/parser.c libyaml/src/reader.c libyaml/src/scanner.c libyaml/src/writer.c libyaml/intra_parser.c libyaml/intravisor.c
 SRC_LOADER := load_elf/load_elf.c
 SRC_TFORK := tfork/tfork.c
 SRC_CVM := cvm/derived.c cvm/template.c cvm/common.c
 SRC_DAEMON := daemon.c
+SRC_HOSTCALL := hostcalls/hostcalls.c hostcalls/carrie_thread.c hostcalls/host_cap_calls.c hostcalls/host_cap_files.c hostcalls/host_syscall_callbacs.c
 
-CFILES  := $(SRC_LKL)  $(SRC_LOADER) $(SRC_YAML) $(SRC_TFORK) $(SRC_CVM) $(SRC_DAEMON)
+CFILES  := $(SRC_LKL)  $(SRC_LOADER) $(SRC_YAML) $(SRC_TFORK) $(SRC_CVM) $(SRC_DAEMON) $(SRC_HOSTCALL)
 ASFILES := arch/riscv/asm.S
 CFLAGS	:= -I . -I lkl_wrap/include -I load_elf/ -I tfork/ -I lkl_wrap -I libyaml/include -Ilibyaml/src -DHAVE_CONFIG_H -Ilibyaml/
 

@@ -1,4 +1,5 @@
 #include "monitor.h"
+#include "utils.h"
 
 #define MAX_STREAM_CAPS	10
 struct stream_caps_store {
@@ -30,7 +31,7 @@ void *c_call_thread_body(void *carg) {
 	me->m_tp = getTP();
 	me->c_tp = (void *)(me->stack+4096);
 
-	printf("me->func = %p, addr=%p, sp = %p\n", me->func, addr, getSP());
+	printf("me->func = %p, addr=0x%ld, sp = %p\n", me->func, addr, getSP());
 
 #ifdef SIM
 //	__asm__ __volatile__ ("mv ra, %0" : : "r"(ra): "memory" );

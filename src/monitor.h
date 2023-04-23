@@ -186,7 +186,7 @@ struct c_thread {
 	char **argv;
 
 	pthread_t tid;
-	int task_id; // the id obtained by thr_self. 
+	long task_id; // the id obtained by thr_self. 
 	pthread_attr_t tattr;
 
 	struct s_box *sbox;
