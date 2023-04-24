@@ -157,7 +157,6 @@ void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
 }
 
 // note: restore main thread of cvm (from half of tp_write function)
-// TODO: restore threads in two mode
 void gen_caps_restored(struct c_thread *target_thread)
 {
     target_thread->m_tp = getTP();
@@ -237,7 +236,6 @@ long load_ucontext(struct c_thread *target_thread)
     memcpy(&mc_capregs, &(target_thread->cap_regs), sizeof(struct capreg));
     mc_capregs.cp_sstatus = target_thread->gp_regs.sstatus;
 
-    // TODO: consider the monitor mode(ddc.base=0) thread
     void* __capability ddc=target_thread->cap_regs.ddc;
     unsigned long base = cheri_getbase(ddc);
     if (base==0x0) { // monitor
@@ -293,7 +291,6 @@ long load_sub_thread(struct c_thread *ct, struct c_thread *t_ct)
             ;
     }
 
-    // TODO: change thread stack here? Does the fini execution correctly?
     void* res=mmap(NULL, TEMP_STACK_SIZE, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
     assert(res!=MAP_FAILED);
     ct->temp_stack = res;

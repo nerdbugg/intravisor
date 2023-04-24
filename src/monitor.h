@@ -210,9 +210,6 @@ struct cs_lock {
 
 
 struct box_caps_s {
-	size_t sealcap_size;
-	void * __capability sealcap;
-
 	void * __capability sealed_codecap;
 	void * __capability sealed_datacap;
 	void * __capability dcap;
@@ -220,6 +217,9 @@ struct box_caps_s {
 	void * __capability sealed_codecapt2;
 	void * __capability sealed_datacapt;
 	void * __capability sealed_ret_from_mon;
+
+	void * __capability sealcap;
+	size_t sealcap_size;
 };
 
 

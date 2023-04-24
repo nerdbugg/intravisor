@@ -169,3 +169,10 @@ struct c_thread *get_cur_thread() {
 
 	return ret;
 }
+
+void* get_cur_localcapstore()
+{
+	struct c_thread* ct = get_cur_thread();
+	void* base = ct->sbox->base;
+	return base+0xe001000;
+}

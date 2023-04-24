@@ -182,16 +182,22 @@ tp_write:
 
 		jal hostcall
 
+		// note: compute abosolute local_cap_store from $sp?
+		jal get_cur_localcapstore
+
 #ifndef SIM
-		lc	ct0, -16(s0)	//ret_from_mon pcc
-		lc	ct1, -32(s0)	//ret_from_mon ignore
-		lc	ct2, -48(s0)	//comp ddc unsealed
+		lc	ct0, 16*11(a0)	// sealed ret_from_mon pcc [11]
+		lc	ct1, 16*12(a0)	// sealed ret_from_mon ddc [12]
+		lc	ct2, 16*2(a0)	// unsealed comp ddc [2]
 #else
 		ld	t0, -16(s0)
 		ld	t1, -32(s0)
 		ld	t2, -48(s0)
 #endif
 
+		// note: re-calculate s0 register here
+		// (sp may changed during restoration)
+		addi	s0,sp, 112
 		ld	s0, 0(sp)
 		ld	ra, 16(sp)
 
