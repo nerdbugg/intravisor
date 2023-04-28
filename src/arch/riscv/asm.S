@@ -169,6 +169,9 @@ tp_write:
 		sd	s0, 0(sp)
 		sd	ra, 16(sp)
 		addi	s0,sp, 112
+
+		// TODO: setcontext and assign it to c_thread here?
+
 #ifndef SIM
 		sc	ct0, -16(s0)	//ret_from_mon pcc
 		sc	ct1, -32(s0)	//reg_from_mod ignore
@@ -181,6 +184,8 @@ tp_write:
 #endif
 
 		jal hostcall
+		addi	sp, sp, -8
+		sd	a0, 0(sp)
 
 		// note: compute abosolute local_cap_store from $sp?
 		jal get_cur_localcapstore
@@ -195,6 +200,8 @@ tp_write:
 		ld	t2, -48(s0)
 #endif
 
+		ld	a0, 0(sp)
+		addi	sp, sp, 8
 		// note: re-calculate s0 register here
 		// (sp may changed during restoration)
 		addi	s0,sp, 112
