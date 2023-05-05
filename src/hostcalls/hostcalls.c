@@ -3,6 +3,9 @@
 #include "carrier_thread.h"
 #include <assert.h>
 
+#include <stdio.h>
+#include "hostcalls/hostcall_tracer.h"
+
 #define __asm_syscall(...) \
 	__asm__ __volatile__ ("ecall\n\t" \
 	: "=r"(a0) : __VA_ARGS__ : "memory"); \
@@ -224,6 +227,10 @@ long hostcall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, lon
 	struct c_thread *ct = get_cur_thread();
 	ct->c_tp = getTP();
 	__asm__ __volatile__("mv tp, %0;" :: "r"(ct->m_tp) : "memory");
+
+#ifdef HC_TRACE
+	hostcall_trace("%d\n", t5);
+#endif
 
 #if 0
 //	if ( (ct->id !=1) && debug_calls)

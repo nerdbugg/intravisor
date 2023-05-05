@@ -4,6 +4,7 @@
 #include "tfork.h"
 #include "cvm/init.h"
 #include "cvm/log.h"
+#include "hostcalls/hostcall_tracer.h"
 
 struct s_box	cvms[MAX_CVMS];
 int send_req, receive_resp;
@@ -164,7 +165,11 @@ int monitor_init() {
 	setup_sig();
 	memset(cvms, 0, sizeof(cvms));
 	init_cap_files_store();
+	// init callback/hostcall trace file
+	init_hc_tracer();
+	// init callback manager store
 	init_cbs(); // callbacks
+	// init default hostcall handlers
 /*** 		we generate and seal intravisor caps. cVMs use them later as hostcall/syscall handler ***/
 
 	void *__capability ddc_cap = cheri_getdefault();

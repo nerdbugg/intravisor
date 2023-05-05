@@ -10,7 +10,7 @@ SRC_LOADER := load_elf/load_elf.c
 SRC_TFORK := tfork/tfork.c
 SRC_CVM := cvm/derived.c cvm/template.c cvm/common.c
 SRC_DAEMON := daemon.c
-SRC_HOSTCALL := hostcalls/hostcalls.c hostcalls/carrie_thread.c hostcalls/host_cap_calls.c hostcalls/host_cap_files.c hostcalls/host_syscall_callbacs.c
+SRC_HOSTCALL := hostcalls/hostcalls.c hostcalls/carrie_thread.c hostcalls/host_cap_calls.c hostcalls/host_cap_files.c hostcalls/host_syscall_callbacs.c hostcalls/hostcall_tracer.c
 
 CFILES  := $(SRC_LKL)  $(SRC_LOADER) $(SRC_YAML) $(SRC_TFORK) $(SRC_CVM) $(SRC_DAEMON) $(SRC_HOSTCALL)
 ASFILES := arch/riscv/asm.S
@@ -22,6 +22,10 @@ endif
 
 ifdef DEBUG
   CFLAGS += -DDEBUG
+endif
+
+ifdef HC_TRACE
+  CFLAGS += -DHC_TRACE
 endif
 
 # use make CONFIG=1 --ignore-errors to generate compile_commands.json
