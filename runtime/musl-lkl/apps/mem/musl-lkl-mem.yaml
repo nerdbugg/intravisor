@@ -6,10 +6,10 @@ capfiles:
 
 ---
 cVMs:
-- name: cap_file_test
+- name: mem_test
   disk: disk.img
   runtime: libmusl-lkl.so
-  args: /ld.so /app/cap_file
+  args: /ld.so /app/mem
   callback_out: monitor
   isolation:
   - base: 0x20000000
