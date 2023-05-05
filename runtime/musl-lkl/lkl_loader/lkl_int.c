@@ -927,7 +927,7 @@ extern void *mount_thread(void *arg);
 	pthread_join(mount);
 #else
 	// generate snapshot
-	//wrap_host_save();
+	wrap_host_save();
 
 	mount_thread(&m_args);
 #endif
