@@ -1,9 +1,13 @@
+#include <time.h>
+#include <sys/time.h>
+#include <assert.h>
+
 #include "monitor.h"
-#include "time.h"
-#include "assert.h"
 #include "tfork.h"
+#include "utils.h"
 #include "cvm/init.h"
 #include "cvm/log.h"
+#include "hostcalls/host_syscall_callbacs.h"
 #include "hostcalls/hostcall_tracer.h"
 
 struct s_box	cvms[MAX_CVMS];
@@ -28,90 +32,6 @@ extern void __inline__ cinv(void *, void *, void *, void *, void *, void *, void
 #else
 extern void cinv(void *, void *);
 #endif
-
-
-
-void sig_handler(int j, siginfo_t *si, void *uap) {
-	mcontext_t *mctx = &((ucontext_t *)uap)->uc_mcontext;
-	printf("trap %d\n", j);
-	printf("SI_ADDR: 0x%lx\n", si->si_addr);
-	printf("SI_PC_ADDR: 0x%lx\n", mctx->mc_gpregs.gp_sepc);
-
-#ifdef SIM 
-	printf("not implemented, linux has different mcontext\n");
-#else
-	__register_t ra = mctx->mc_gpregs.gp_ra;
-	__register_t sp = mctx->mc_gpregs.gp_sp;
-	__register_t gp = mctx->mc_gpregs.gp_sp;
-	__register_t tp = mctx->mc_gpregs.gp_tp;
-	__register_t *a = &mctx->mc_gpregs.gp_a[0];
-	__register_t *t = &mctx->mc_gpregs.gp_t[0];
-	__register_t *s = &mctx->mc_gpregs.gp_s[0];
-	__register_t gp_sepc = mctx->mc_gpregs.gp_sepc;
-	__register_t gp_sstatus = mctx->mc_gpregs.gp_sstatus;
-
-	printf("ra = 0x%lx, sp = 0x%lx, gp = 0x%lx, tp = 0x%lx, gp_sepc = %p, gp_status = %p\n", ra, sp, gp, tp, gp_sepc, gp_sstatus);
-	for(int i = 0; i < 7; i++) {
-		printf("gp_t[%d]\t0x%lx\n", i, t[i]);
-	}
-
-	for(int i = 0; i < 12; i++) {
-		printf("gp_s[%d]\t0x%lx\n", i, s[i]);
-	}
-
-	for(int i = 0; i < 8; i++) {
-		printf("gp_a[%d]\t0x%lx\n", i, a[i]);
-	}
-
-	int sepcc_offset = (4+7+12+8)*16;
-	int ddc_offset = (4+7+12+8+1)*16;
-
-	log("sepcc:\n");
-	CHERI_CAP_PRINT(*(void* __capability*)(mctx->mc_capregs+sepcc_offset));
-	log("ddc:\n");
-	CHERI_CAP_PRINT(*(void* __capability*)(mctx->mc_capregs+ddc_offset));
-
-#endif
-	printf("program receive trap signal, press Ctrl+c to exit.\n");
-	while(1);
-}
-
-void setup_segv_sig() {
-	stack_t sigstack;
-	struct sigaction sa;
-#if 1
-	int stsize = SIGSTKSZ*100; // 900 * pagesize
-
-	sigstack.ss_sp = malloc(stsize);
-	if(sigstack.ss_sp == NULL) {
-		perror("malloc");
-	}
-
-	sigstack.ss_size = stsize;
-	sigstack.ss_flags = 0;
-	if(sigaltstack(&sigstack, NULL) == -1) {
-		perror("sigstack");
-		exit(1);
-	}
-#endif
-
-	dlog("%d Alternate stack is at %10p-%p\n", stsize, sigstack.ss_sp,sigstack.ss_sp+stsize);
-
-//	sa.sa_handler = sig_handler;
-	sa.sa_sigaction = sig_handler;
-	sigemptyset(&sa.sa_mask);
-	sa.sa_flags = SA_ONSTACK | SA_SIGINFO;
-
-	if(sigaction(SIGSEGV, &sa, NULL) == -1) {
-		perror("sigaction");
-		exit(1);
-	}
-}
-
-void setup_sig() {
-	setup_segv_sig();
-	// setup_save_sig();
-}
 
 void parse_cmdline(char *argv[], const char *disk_img, const char *runtime_so, char **yaml_cfg, int *skip_argc) {
 	for (++argv; *argv; ++argv)
@@ -162,7 +82,6 @@ int monitor_init() {
 		printf("\n mutex init failed\n");
 		return 1;
 	}
-	setup_sig();
 	memset(cvms, 0, sizeof(cvms));
 	init_cap_files_store();
 	// init callback/hostcall trace file
@@ -193,6 +112,7 @@ int monitor_init() {
 	void * __capability sealed_ddc = cheri_seal(ddc_cap, sealcap);   // default (?)
 
 	host_syscall_handler_adv("monitor", sealed_pcc, sealed_ddc, sealed_pcc2);
+	return 0;
 }
 
 int build_capfile(struct capfile *f) {
@@ -258,6 +178,9 @@ int monitor_main(int argc, char *argv[]) {
 	if(state == 0) {
 		printf("yaml is corrupted, die\n"); exit(1);
 	}
+
+	dlog("state = %p\n", state);
+	dlog("state->clist = %p\n", state->clist);
 
 	dlog("[%3d ms]: finish parse yaml\n", gettime());
 

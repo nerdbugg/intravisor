@@ -14,6 +14,7 @@
 #include "tfork.h"
 #include "cvm/log.h"
 #include "daemon.h"
+#include "hostcalls/carrier_thread.h"
 
 #define SIGSAVE SIGUSR1
 #define RET_COMP_PPC (16 * 11)
@@ -23,9 +24,8 @@
 // borrowed from CheriBSD freebsd64_machdep.c
 #define	CONTEXT64_GPREGS	(offsetof(struct gpregs, gp_sepc) / sizeof(register_t))
 
-const int TFORK_FAILED = MAP_FAILED;
+const unsigned long TFORK_FAILED = (unsigned long)MAP_FAILED;
 const static int tfork_syscall_num = 577;
-extern struct c_thread *get_cur_thread();
 
 map_entry *cvm_map_entry_list[MAX_CVMS];
 int cvm_snapshot_fd[MAX_CVMS];
@@ -35,7 +35,7 @@ int tfork(void *src_addr, void *dst_addr, int len)
     return syscall(tfork_syscall_num, src_addr, dst_addr, len);
 }
 
-unsigned int parse_permstr(char *perms)
+unsigned int parse_permstr(const char *perms)
 {
     unsigned int res = 0;
     if (perms[0] == 'r')
@@ -137,7 +137,7 @@ void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
     {
         size_t size = p->end - p->start;
 
-        memcpy(snapshot_data + offset, p->start, size);
+        memcpy(snapshot_data + offset, (void*)p->start, size);
 
         offset += size;
         p = p->next;

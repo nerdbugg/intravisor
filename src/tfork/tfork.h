@@ -1,7 +1,7 @@
 #ifndef TFORK_H
 #define TFORK_H
 
-#define MAX_CVMS	10
+#define MAX_CVMS	200
 
 int tfork(void *, void *, int);
 

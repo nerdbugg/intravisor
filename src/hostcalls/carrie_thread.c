@@ -7,8 +7,6 @@ extern void cinv2(long, void *__capability, void *__capability, void *__capabili
 
 void *c_thread_body(void *carg) {
 	struct c_thread *me = (struct c_thread *)carg;
-//	void *sp_read = me->stack + me->stack_size;
-//	unsigned long *sp = (sp_read -  4096*1);
 
 	long addr = (long) me->arg; //there is no mon_to_cap here because in all cases the args are cap-relative
 
@@ -16,7 +14,6 @@ void *c_thread_body(void *carg) {
 	me->c_tp = (void *)(me->stack+4096);
 	thr_self(&me->task_id);
 
-//	printf("me->func = %p, addr=%p, sp = %p\n", me->func, addr, getSP());
 
 #ifdef SIM
 //	__asm__ __volatile__ ("mv ra, %0" : : "r"(ra): "memory" );
@@ -37,14 +34,18 @@ void *c_thread_body(void *carg) {
 	size_t sealcap_size;
 
 	sealcap_size = sizeof(sealcap);
+
+#ifdef	__FreeBSD__
 	if (sysctlbyname("security.cheri.sealcap", &sealcap, &sealcap_size, NULL, 0) < 0) {
 		printf("sysctlbyname(security.cheri.sealcap)\n");while(1);
 	}
+#else
+	printf("sysctlbyname security.cheri.sealcap is not implemented in your OS\n");
+#endif
 
-	void * __capability ccap = codecap_create((void *) me->sbox->cmp_begin, (void *) me->sbox->cmp_end);
-	void * __capability dcap = datacap_create((void *) me->sbox->cmp_begin, (void *) me->sbox->cmp_end);
-
+	void * __capability ccap = codecap_create((void*)me->sbox->cmp_begin, (void*)me->sbox->cmp_end);
 	ccap = cheri_setaddress(ccap, (unsigned long) me->func);
+	void * __capability dcap = datacap_create((void *) me->sbox->cmp_begin, (void *) me->sbox->cmp_end);
 
 	void * __capability sealed_datacap = cheri_seal(dcap, sealcap);
 	void * __capability sealed_codecap = cheri_seal(ccap, sealcap);
@@ -53,8 +54,9 @@ void *c_thread_body(void *carg) {
 
 repeat:
 
-//	__asm__ __volatile__ ("mv ra, %0" : : "r"(ra): "memory" );
-	__asm__ __volatile__("mv tp, %0;" :: "r"(me->c_tp) : "memory");
+	cmv_ctp(me->c_tp);
+	// note: change sp to comparted-mode in cinv2
+	
 //inline doesnt work like this
 	cinv2(addr,
 		  sealed_codecap,  	//entrance
@@ -62,7 +64,7 @@ repeat:
 		  dcap 			//compartment data cap
 		);
 
-	__asm__ __volatile__("mv tp, %0;" :: "r"(me->m_tp) : "memory");
+	cmv_ctp(me->m_tp);
 	goto repeat;
 
 #endif
@@ -73,21 +75,32 @@ repeat:
 
 void destroy_carrie_thread(struct c_thread *ct) {
 	pthread_t tid = pthread_self();
-    pthread_mutex_lock(&ct->sbox->ct_lock);
+	pthread_mutex_lock(&ct->sbox->ct_lock);
 	for(int i = 0; i < MAX_THREADS; i++) {
 		if(ct[i].tid == tid) {
 			ct[i].id = -1;
   			pthread_mutex_unlock(&ct->sbox->ct_lock);
 //			printf("thread %d exited\n", i);
+#ifdef LKL
 			lkl_host_ops.thread_exit();
+#else
+			if(ct->sbox->cid > 2) {
+				printf("EXIT ON < 0.95X\n");
+				exit(0);
+			}
+			pthread_exit(NULL);
+#endif
+			// todo: is below code reachable?
+			// note: munmap temp stack (used in snapshot restoring)
 			int res=munmap(ct->temp_stack, TEMP_STACK_SIZE);
-			assert(res==0);
 		}
 	}
-    pthread_mutex_unlock(&ct->sbox->ct_lock);
+	pthread_mutex_unlock(&ct->sbox->ct_lock);
 	printf("something is wrong with the thread, check %p. (may be wrong with sbox->ct->m_tp/c_tp ?)\n", tid);
 	while(1);
 }
+
+#ifdef LKL
 
 struct thread_bootstrap_arg {
 	struct thread_info *ti;
@@ -97,7 +110,7 @@ struct thread_bootstrap_arg {
 
 long create_carrie_thread(struct c_thread *ct, void *f, void *arg) {
 again:
-    pthread_mutex_lock(&ct->sbox->ct_lock);
+	pthread_mutex_lock(&ct->sbox->ct_lock);
 	int j;
 	for(j = 0; j < MAX_THREADS; j++) {
 		if(ct[j].id == -1)
@@ -114,7 +127,7 @@ again:
 	int tmp = j;
 
 	ct[tmp].id = tmp;
-    pthread_mutex_unlock(&ct->sbox->ct_lock);
+	pthread_mutex_unlock(&ct->sbox->ct_lock);
 
 	int ret = pthread_attr_init(&ct[tmp].tattr);
 	if(ret != 0) {
@@ -124,7 +137,7 @@ again:
 	ct[tmp].stack_size = STACK_SIZE;
 	ct[tmp].stack = (void *)(ct[tmp].sbox->cmp_end - ct[tmp].stack_size*(ct[tmp].id+1));
 
-    ret = pthread_attr_setstack(&ct[tmp].tattr, ct[tmp].stack, ct[tmp].stack_size);
+	ret = pthread_attr_setstack(&ct[tmp].tattr, ct[tmp].stack, ct[tmp].stack_size);
 	if(ret != 0) {
 		perror("pthread attr setstack");printf("ret = %d\n", ret);
 	}
@@ -158,6 +171,9 @@ again:
 	return (long) ct[tmp].tid;
 }
 
+#endif
+
+// todo: using old ABI, morello version using $tp to save cid
 struct c_thread *get_cur_thread() {
 	int cid = (long) getSP() / 0x10000000;
 	if ((cid <= 0 ) || (cid >= MAX_CVMS) ) {
@@ -176,3 +192,4 @@ void* get_cur_localcapstore()
 	void* base = ct->sbox->base;
 	return base+0xe001000;
 }
+

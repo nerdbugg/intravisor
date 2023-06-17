@@ -75,14 +75,15 @@ repeat:
 	pthread_cond_signal(&cs->call_lock2.cond); 
 	pthread_mutex_unlock(&cs->call_lock2.lock); 
 
-	__asm__ __volatile__("mv tp, %0;" :: "r"(me->c_tp) : "memory");
+	cmv_ctp(me->c_tp);
+
 	cinv2(addr,
 		  sealed_codecap,  	//entrance
 		  sealed_datacap,  	//entrance
 		  dcap 			//compartment data cap
 		);
 
-	__asm__ __volatile__("mv tp, %0;" :: "r"(me->m_tp) : "memory");
+	cmv_ctp(me->m_tp);
 
 	pthread_mutex_lock(&cs->call_lock.lock);
 	if( ! cs->call_lock.predicate ) pthread_cond_wait(&cs->call_lock.cond, &cs->call_lock.lock); 

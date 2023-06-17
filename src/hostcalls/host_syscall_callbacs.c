@@ -1,7 +1,7 @@
 #include "monitor.h"
 
-#define CB_NAME_LEN		20
-#define MAX_CALLBACKS	10
+#define CB_NAME_LEN	20
+#define MAX_CALLBACKS	(MAX_CVMS+1)
 
 //todo: caps here should be sealed
 struct sc_cb_store_s {
@@ -26,7 +26,7 @@ void init_cbs() {
 
 int host_syscall_handler_adv(char *libos, void * __capability pcc, void * __capability ddc, void * __capability pcc2) {
 #ifdef CB_DEBUG
-	printf("MON: SYSCALL avertise: %s, %p, %p\n", libos, pcc, ddc);
+	printf("MON: SYSCALL advertise: %s, %p, %p\n", libos, pcc, ddc);
 #endif
 	pthread_mutex_lock(&sc_cb_store_lock);
 	int i = 0;
@@ -54,7 +54,7 @@ int host_syscall_handler_adv(char *libos, void * __capability pcc, void * __capa
 
 int host_syscall_handler_prb(char *key,  void *ppc, void *ddc, void *ppc2) {
 #ifdef CB_DEBUG
-	printf("MON: probe syscall handler for key %s\n", key);
+	printf("MON: probe syscall handler for key %s, PPC slot: %p, DDC slot: %p, PCC2 slot: %p\n", key, ppc, ddc, ppc2);
 #endif
 	pthread_mutex_lock(&sc_cb_store_lock);
 	int i;

@@ -1,11 +1,13 @@
 #include "monitor.h"
 #include "cvm/log.h"
+#include "utils.h"
+#include "hostcalls/host_syscall_callbacs.h"
 
 // When init template cvm, we must make sure stack memory is accessable by using mmap.
 int init_pthread_stack(struct s_box *cvm)
 {
     struct c_thread *ct = &cvm->threads[0];
-    int ret = mmap(ct->stack, ct->stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
+    void* ret = mmap(ct->stack, ct->stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
     if (ret == MAP_FAILED) {
         perror("mmap");
         return 1;
@@ -36,78 +38,71 @@ int argc, char *argv[]
     memset(&encl_map, 0, sizeof(struct encl_map_info));
 
     load_elf(f->runtime, base, &encl_map);
-    if (encl_map.base < 0)
-    {
+    if (encl_map.base < 0) {
         printf("Could not load '%s', die\n", f->runtime);
-        while (1)
-            ;
+        while (1);
     }
 
-    if (encl_map.base != (unsigned long)base)
-    {
+    if (encl_map.base != (unsigned long)base) {
         printf("mapped at wrong addres [%p]:[%p], die\n", encl_map.base, base);
-        while (1)
-            ;
+        while (1);
     }
 
+    if(encl_map.size > CVM_MAX_SIZE) {
+        log("Actual cVM is bigger(0x%lx) than it could be(0x%lx), die\n", encl_map.size, CVM_MAX_SIZE);
+        while(1);
+    }
     dlog("ELF BASE = %p, MAP SIZE = %lx, ENTRY = %p\n", encl_map.base, encl_map.size, encl_map.entry_point);
 
     int ret = 0;
 
-    if (encl_map.entry_point == 0)
-    {
+    if (encl_map.entry_point == 0) {
         printf("entry_point is 0, runtime image is wrong/corrupted\n");
-        while (1)
-            ;
-    }
-    else {
+        while (1) ;
+    } else {
         dlog("encl_map.entry = %p\n", encl_map.entry_point);
     }
 
-    if (encl_map.ret_point == 0)
-    {
+    if (encl_map.ret_point == 0) {
         printf("ret_from_monitor is 0, runtime image is wrong/corrupted\n");
         while (1)
             ;
-    }
-    else {
+    } else {
         dlog("encl_map.ret = %p\n", encl_map.ret_point);
     }
 
     cvms[cid].host_exit_addr = (uint64_t)encl_map.host_exit;
-    if (encl_map.cap_relocs)
-    {
+    if (encl_map.cap_relocs) {
         printf("we have __cap_relocs, it is a purecap binary\n");
         cvms[cid].pure = 1;
+        // cvms[cid].use_scl = 2; //todo, should be a list of SCL it uses
+        cvms[cid].cr = (struct cap_relocs_s *) encl_map.cap_relocs;
+    	cvms[cid].cap_relocs_size = encl_map.cap_relocs_size;
+	cvms[cid].cap_relocs = encl_map.cap_relocs;
         struct cap_relocs_s *cr = (struct cap_relocs_s *)encl_map.cap_relocs;
-        for (int j = 0; j < encl_map.cap_relocs_size / sizeof(struct cap_relocs_s); j++)
-        {
-            printf("TODO: create cap: %p Base: %p Length: %ld Perms: %lx Unk = %ld\n", f->isol.base + cr[j].dst, cr[j].addr, cr[j].len, cr[j].perms, cr[j].unknown);
+        for (int j = 0; j < encl_map.cap_relocs_size / sizeof(struct cap_relocs_s); j++) {
+            dlog("Create cap: %p Base: %p Length: %ld Perms: %lx Unk = %ld\n", f->isol.base + cr[j].dst, cr[j].addr, cr[j].len, cr[j].perms, cr[j].unknown);
             void *__capability rel_cap;
-            if (cr[j].perms == 0x8000000000000000ll)
-            {
-#if 0
-//there is a problem when I call an asm function. the caller cap doesn't have a proper size.
-//so I just make all call caps PCC-size (see the else)
-				rel_cap = pure_codecap_create((void *) comp->base,(void *)  comp->base + cr[j].addr + cr[j].len);
-				rel_cap = cheri_setaddress(rel_cap, comp->base + cr[j].addr);
-#else
+            if (cr[j].perms == 0x8000000000000000ll) { // Function
+                // All caps are PCC-size. It is itended otherwise AUIPC doesn't work
                 rel_cap = pure_codecap_create((void *)f->isol.base, (void *)f->isol.base + f->isol.size);
                 rel_cap = cheri_setaddress(rel_cap, f->isol.base + cr[j].addr);
-#endif
-            }
-            else
-            {
+            } else if(cr[j].perms == 0x0ull) { // Object
                 // TODO: we need something better
-                if (cr[j].len == 0xabba)
-                {
-                    printf("replace cap for caps\n");
+                if (cr[j].len == 0xabba) { // size of local_cap_store defined in elf file
+                    log("replace cap for caps\n");
+                    log("RISCV ABI\n");
+                    // redefine it in base+0xe001000 - base+0xe002000
                     rel_cap = datacap_create((void *)f->isol.base + 0xe001000, f->isol.base + 0xe002000);
-                }
-                else
+                } else
                     rel_cap = datacap_create((void *)f->isol.base + cr[j].addr, (void *)f->isol.base + cr[j].addr + cr[j].len);
+            } else if(cr[j].perms == 0x4000000000000000ll) { // Constant
+                rel_cap = datacap_create((void*)f->isol.base + cr[j].addr, (void*)f->isol.base + cr[j].addr + cr[j].len);
+            } else {
+                log("Wrong Perm! 0x%llx, die\n", cr[j].perms);
+                while(1);
             }
-            printf("store REL_CAP\n");
+
             CHERI_CAP_PRINT(rel_cap);
             st_cap(cr[j].dst + f->isol.base, rel_cap);
         }
@@ -122,10 +117,13 @@ int argc, char *argv[]
     cvms[cid].ret_from_mon = encl_map.ret_point;
     cvms[cid].syscall_handler = encl_map.syscall_handler;
 
+    cvms[cid].end_of_ro = encl_map.end_of_ro;
+    cvms[cid].extra_load = encl_map.extra_load;
+    cvms[cid].cid = cid;
+
+    // setup libos field
     memset(cvms[cid].libos, 0, MAX_LIBOS_PATH);
     strcpy(cvms[cid].libos, f->runtime);
-
-    //	printf("cvms.base = %p, cvms.box_size = %lx\n", cvms[cid].base, cvms[cid].box_size);
 
     cvms[cid].cmp_begin = cmp_begin;
     cvms[cid].cmp_end = cmp_end;
@@ -140,8 +138,7 @@ int argc, char *argv[]
 
     struct c_thread *ct = cvms[cid].threads;
     ////////////////////
-    for (int i = 0; i < MAX_THREADS; i++)
-    {
+    for (int i = 0; i < MAX_THREADS; i++) {
         ct[i].id = -1;
         ct[i].sbox = &cvms[cid];
     }
@@ -167,53 +164,48 @@ int argc, char *argv[]
 int gen_caps(struct s_box *cvm, struct c_thread *ct)
 {
     ct->sbox->box_caps.sealcap_size = sizeof(ct->sbox->box_caps.sealcap);
-    if (sysctlbyname("security.cheri.sealcap", &ct->sbox->box_caps.sealcap, &ct->sbox->box_caps.sealcap_size, NULL, 0) < 0)
-    {
+    if (sysctlbyname("security.cheri.sealcap", &ct->sbox->box_caps.sealcap, &ct->sbox->box_caps.sealcap_size, NULL, 0) < 0) {
         printf("sysctlbyname(security.cheri.sealcap)\n");
-        while (1)
-            ;
+        while (1);
     }
     // assert(ct->sbox == cvm);
     void *__capability ccap;
     if (cvm->pure)
         ccap = pure_codecap_create((void *)ct->sbox->cmp_begin, (void *)ct->sbox->cmp_end);
     else
-        //                                  0x20000000                 0x30000000
         ccap = codecap_create((void *)ct->sbox->cmp_begin, (void *)ct->sbox->cmp_end);
-    // ccap = 0x20000000
+    ccap = cheri_setaddress(ccap, (unsigned long)(ct->func) + (unsigned long)(ct->sbox->base));
 
     void *__capability dcap = datacap_create((void *)ct->sbox->cmp_begin, (void *)ct->sbox->cmp_end);
-    // dcap = 0x20000000
     ct->sbox->box_caps.dcap = dcap;
 
-    ccap = cheri_setaddress(ccap, (unsigned long)(ct->func) + (unsigned long)(ct->sbox->base));
-    // ccap = 0x200012c4
     ct->sbox->box_caps.sealed_datacap = cheri_seal(dcap, ct->sbox->box_caps.sealcap);
-    // ddc = 0x53d20
     ct->sbox->box_caps.sealed_codecap = cheri_seal(ccap, ct->sbox->box_caps.sealcap);
-    // ppc = 0x53d00
-    // assert(ct->sbox == cvm);
-    // probe capabilitites for syscall/hostcall.
-    if (ct->cb_out == NULL)
-    {
+    if (ct->cb_out == NULL) {
         printf("callback_out is empty, use default 'monitor'\n");
         ct->cb_out = "monitor";
     }
-    host_syscall_handler_prb(ct->cb_out, &ct->sbox->box_caps.sealed_codecapt, &ct->sbox->box_caps.sealed_datacapt, &ct->sbox->box_caps.sealed_codecapt2);
+    host_syscall_handler_prb(ct->cb_out, &ct->sbox->box_caps.sealed_codecapt, &ct->sbox->box_caps.sealed_datacapt,
+                             &ct->sbox->box_caps.sealed_codecapt2);
 
     // generate capabilitites for ret_from_mon. TODO: we should make them public and our syscall/hostcall should fetch them
     // todo: we need something better than comp_to_mon_force
-    ccap = cheri_setaddress(ccap, comp_to_mon_force(ct->sbox->ret_from_mon + ct->sbox->base - ct->sbox->cmp_begin, (unsigned long)ct->sbox)); // here should be base but not cmp_begin.
+    ccap = cheri_setaddress(ccap, 
+                            (unsigned long)comp_to_mon_force(
+                                (unsigned long)ct->sbox->ret_from_mon + 
+                                (unsigned long)ct->sbox->base - (unsigned long)ct->sbox->cmp_begin, 
+                                              ct->sbox)); // here should be base but not cmp_begin.
     ct->sbox->box_caps.sealed_ret_from_mon = cheri_seal(ccap, ct->sbox->box_caps.sealcap);
 
     // if we have syscall handler, we should publish it. TODO: let's init thread pubs this handler?
-    if (cvm->syscall_handler != 0)
-    {
+    if (cvm->syscall_handler != 0) {
         printf("ACHTUNG: '%s' has syscall handler 'syscall_handler' at %p\n", cvm->libos, cvm->syscall_handler);
-        void *__capability syscall_pcc_cap = cheri_setaddress(ccap, (unsigned long)comp_to_mon_force(cvm->syscall_handler + ct->sbox->base - ct->sbox->cmp_begin, (unsigned long)ct->sbox));
+        void *__capability syscall_pcc_cap = cheri_setaddress(ccap, (unsigned long)comp_to_mon_force(cvm->syscall_handler + ct->sbox->base - ct->sbox->cmp_begin, ct->sbox));
         void *__capability sealed_syscall_pcc_cap = cheri_seal(syscall_pcc_cap, ct->sbox->box_caps.sealcap);
 
-        host_syscall_handler_adv(cvm->libos, sealed_syscall_pcc_cap, ct->sbox->box_caps.sealed_datacap);
+        // note: use cur cvm's syscall handler cap here, the pcc2 is currently not used, act just as a placeholder
+        // todo: figure out the syscall abi here
+        host_syscall_handler_adv(cvm->libos, sealed_syscall_pcc_cap, ct->sbox->box_caps.sealed_datacap, ct->sbox->box_caps.sealed_codecapt2);
     }
     // assert(ct->sbox == cvm);
 }
@@ -253,23 +245,34 @@ void *init_thread(int cid)
     int cenv_size = 0;
     // sp 是栈顶指针(位于低地址), 初始化栈按地址增长方向, 依次存放 argc, argv, envs
     sp[0] = me->argc;
+#ifdef HVB_CVM
     sp[1] = (unsigned long)(mon_to_comp(argv1, me->sbox));
+#else
+    sp[1] = 0xaa;
+    sp[2] = (unsigned long) (mon_to_comp(argv1, me->sbox));
+    sp[3] = 0xbb;
+    int shift = 4;
+#endif
+
     int i;
-    for (i = 1; i < me->argc; i++)
-    {
+    for (i = 1; i < me->argc; i++) {
         printf("[%d] '%s'\n", i, me->argv[i]);
 
         int tmp_add = snprintf(&cenv[cenv_size], 128, "%s\0", me->argv[i]);
-        if (cenv_size + tmp_add > 4096)
-        {
+        if (cenv_size + tmp_add > 4096) {
             printf("need more space for args on the stack, die\n");
-            while (1)
-                ;
+            while (1);
         }
+#ifdef HYB_CVM
         sp[i + 1] = (unsigned long)(mon_to_comp(&cenv[cenv_size], me->sbox));
         printf("sp[i+1] = '%s'\n", (char *)(comp_to_mon(sp[i + 1], me->sbox)));
+#else
+        sp[shift + 2*(i-1)] = (unsigned long) (mon_to_comp(&cenv[cenv_size], me->sbox));
+        sp[shift + 2*(i-1) + 1] = 0xcc + i - shift;
+#endif
         cenv_size += tmp_add + 1;
     }
+#ifdef HYB_CVM
     sp[i + 1] = 0; // terminator
     int ienv = i + 2;
 
@@ -282,10 +285,19 @@ void *init_thread(int cid)
     sp[ienv++] = mon_to_comp(env4, me->sbox);
     sp[ienv++] = mon_to_comp(env5, me->sbox);
     sp[ienv++] = 0;
+#else
+    sp[shift + i] = 0; // terminator
+    sp[shift + i+1] = 0; // terminator
+    int ienv = shift + i + 2;
+    dlog("&env0=%p, &env2=%p\n", &sp[ienv], &sp[ienv+2]);
+    sp[ienv++] = 0;
+    sp[ienv++] = 0;
+#endif
 
+//TODO: there is a problem with alignment of auxv, which depends on the number of arguments
     size_t *auxv = &sp[ienv];
-    dlog("%d sp = %p\n", __LINE__, sp);
 
+#ifdef LKL
     if (strlen(me->sbox->disk_image))
     {
         me->sbox->lkl_disk.fd = open(me->sbox->disk_image, O_RDWR);
@@ -300,9 +312,11 @@ void *init_thread(int cid)
         me->sbox->lkl_disk.fd = -1;
 
     me->sbox->lkl_disk.ops = &lkl_dev_blk_ops;
+#endif
 
     //	printf("LOADER: argv = %lx, envp = %lx(expected %lx), auxv = %lx \n", &sp[1], &sp[4], &sp[1 + 1 + sp[0]],auxv);
     //	printf("LOADER: argv = %s, envp = %s, \n", sp[1], sp[4]);
+#ifdef HYB_CVM
     auxv[0] = AT_BASE;
     auxv[1] = (unsigned long)me->sbox->base;
     auxv[2] = AT_ENTRY;
@@ -333,6 +347,30 @@ void *init_thread(int cid)
     auxv[aid++] = 0;
     auxv[aid++] = AT_NULL;
     auxv[aid++] = 0;
+#else
+    int aid = 0;
+    auxv[aid++] = AT_BASE;
+    auxv[aid++] = 0;
+
+    void* __capability bcap = pure_codecap_create((void*)me->sbox->base, me->sbox->base+CVM_MAX_SIZE);
+    bcap = cheri_setaddress(bcap, me->sbox->base);
+    st_cap(&auxv[aid], bcap);
+    aid += 2;
+    
+    auxv[aid++] = AT_PHDR;
+    auxv[aid++] = 0;
+    auxv[aid++] = mon_to_comp(me->sbox->base, me->sbox) + 0x40;
+    auxv[aid++] = 0;
+    auxv[aid++] = AT_NULL;
+    auxv[aid++] = 0;
+    auxv[aid++] = 0;
+    auxv[aid++] = 0;
+
+    auxv[aid++] = AT_NULL;
+    auxv[aid++] = 0;
+    auxv[aid++] = 0;
+    auxv[aid++] = 0;
+#endif
 
     //    auxv[12]  = AT_EXECFN;	auxv[13]  = (size_t) "";
     //    auxv[22] = AT_PLATFORM;	auxv[23] = (size_t) "x86_64";
@@ -371,7 +409,6 @@ void *init_thread(int cid)
 
 #else
 
-    /////////////////////////
     void *__capability sealed_codecap = me->sbox->box_caps.sealed_codecap;
     void *__capability sealed_datacap = me->sbox->box_caps.sealed_datacap;
     void *__capability dcap = me->sbox->box_caps.dcap;
@@ -413,36 +450,73 @@ void *init_thread(int cid)
     dlog("ca6: sealed ret from mon\n");
     CHERI_CAP_PRINT(cinv_args.caps[6]);
 
+    if (me->sbox->pure) {
 
-    if (me->sbox->pure)
-    {
-
-        // TOD: this is very unreliable. we need to use precise bottom of the stack here
-        void *__capability sp_cap = datacap_create((void *)((unsigned long)sp - STACK_SIZE + 4096 * 4), (void *)sp);
+        // TODO: this is very unreliable. we need to use precise bottom of the stack here
+        void *__capability sp_cap = datacap_create((void*) me->stack, 
+                                                   (unsigned long) me->stack+(unsigned long)me->stack_size);
         sp_cap = cheri_setaddress(sp_cap, sp);
 
-        //
         cinv_args.caps[7] = sp_cap;
         dlog("ca7: SP cap for purecap cVMs\n");
         CHERI_CAP_PRINT(cinv_args.caps[7]);
-        //
+
+        // TODO: cvm c_tp is currently not capability
+        void* __capability tp_cap = datacap_create((void*)((unsigned long)me->c_tp), (unsigned long)me->c_tp+4096);
+        // TODO: is it feasible to set address using capability?
+        tp_cap = cheri_setaddress(tp_cap, me->c_tp);
+
+        cinv_args.caps[8] = tp_cap;
+        dlog("ca8: TP cap for purecap cVMs\n");
+        CHERI_CAP_PRINT(cinv_args.caps[8]);
+    } else {
+        // TODO: no arm_sim here
+        sp = mon_to_comp(sp, me->sbox);
+        me->c_tp = mon_to_comp(me->c_tp, me->sbox);
     }
-    //           x2fffc000
-    sp = mon_to_comp(sp, me->sbox);
-    // sp = 0xfffc000
-    //                      0x2ff81000
-    me->c_tp = mon_to_comp(me->c_tp, me->sbox);
-    // me->c_tp = 0xff81000
+
+    if (me->sbox->use_scl) {
+        char *sh_st = malloc(4096*20);
+        if(sh_st==NULL) {
+            printf("can not allocate memory for shadow store, die\n");
+            while(1);
+        }
+
+        void* __capability sh_st_cap = datacap_create((void*)((unsigned long)sh_st), (unsigned long)sh_st+4096*10);
+        sh_st_cap = cheri_setaddress(sh_st_cap, sh_st);
+        st_cap((unsigned long)me->c_tp+128, sh_st_cap);
+
+        struct cap_relocs_s *cr = cvms[2].cr;
+        unsigned int cr_number = cvms[2].cap_relocs_size/sizeof(struct cap_relocs_s);
+        for(int j=0;j<cr_number;j++) {
+            void* __capability rel_cap;
+            // Global/Constant, not Function capability reloc
+            // Copy them to sh_st region
+            // Multiple region share the same code(Function), but have different data instances
+            if(cr[j].perms != 0x8000000000000000ull) {
+                dlog("TODO: DST = %p, Base: %p, Length: %ld\n", cr[j].dst, cr[j].addr, cr[j].len);
+                dlog("COPYING OBJECTS: %lx, %lx, %ld\n", 
+                     (unsigned long)sh_st+cr[j].addr, cvms[2].base+cr[j].addr, cr[j].len);
+                memcpy((unsigned long)sh_st+cr[j].addr, cvms[2].base+cr[j].addr, cr[j].len);
+            }
+        }
+    }
 
     dlog("[%3d ms]: finish init_thread\n", gettime());
     dlog("HW: sp = %p, tp = %p\n", sp, me->c_tp);
     dlog("-----------------------------------------------\n");
 
+    unsigned long* tp_args = (__cheri_fromcap unsigned long*)(me->c_tp);
+    // note: local_cap_store addr, bottom of a reserved cvm stack with a page size
+    tp_args[0] = me->sbox->top - me->sbox->stack_size + 0x1000;
+    tp_args[1] = me->sbox->cid;
+
+    // TODO: may corrupt cinv_args?
+    // TODO: use asm here to avoid &conv_args value change due to the change of $sp?
     __asm__ __volatile__("mv sp, %0;" ::"r"(sp)
                          : "memory");
-    __asm__ __volatile__("mv tp, %0;" ::"r"(me->c_tp)
-                         : "memory");
-    // checkpoint(0x20000000, 0x10000000, "/tmp/checkpoint1");
+    cmv_ctp(me->c_tp);
+
     cinv(
 #if 0
 		  sealed_codecap,  	//ca0:	entrance
@@ -458,12 +532,15 @@ void *init_thread(int cid)
 		  sealed_ret_from_mon, //ca6:	because compartment cannot create CAPS, this cap is created by MON prior calling
 		  auxv[1] /* AT_BASE */ + 0x0e000000 + 0x1000 //local_cap_store
 #else
-        auxv[1] /* AT_BASE */ + 0x0e000000 + 0x1000, // local_cap_store  //-> 0x2e001000
+        // auxv[1] /* AT_BASE */ + 0x0e000000 + 0x1000, // local_cap_store  //-> 0x2e001000
+        tp_args[0], // local_cap_store address (per thread?)
         &cinv_args
 #endif
     );
 
+    printf("something is wrong, die at init_thread %d\n", __LINE__);
     while (1)
         ;
 #endif
 }
+

@@ -58,6 +58,8 @@ cinv:
         j       .cinv_next
 
 .cinv_run_as_pure:
+		lc      ca6, (16*8)(a1)
+		cmove   ctp,ca6
 		cmove	csp, ca0
 .cinv_next:
 
@@ -90,7 +92,7 @@ cinv2:
 		sd	s7,  (8*9)(sp)
 
 		cgetbase	s4, ca3	//take the bottom of the compartment
-        sub     sp, sp, s4	//make sp cap-relative
+		sub     sp, sp, s4	//make sp cap-relative
 
 		cspecialw	ddc, ca3
 		CInvoke ca1, ca2

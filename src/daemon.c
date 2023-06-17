@@ -8,6 +8,9 @@
 #include <sys/ptrace.h>
 #include <machine/reg.h>
 
+#include <cheri/cheri.h>
+#include <cheri/cheric.h>
+
 #include "cvm/log.h"
 #include "monitor.h"
 #include "daemon.h"

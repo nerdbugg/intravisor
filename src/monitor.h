@@ -47,14 +47,18 @@
 
 
 #include <errno.h>
+
+#ifdef LKL
 #include <lkl/asm/host_ops.h>
 #include "lkl_wrap/lkl_host.h"
+#endif
 
 #include <stdbool.h>
 #include <sys/reg.h>
 #include <machine/reg.h>
 
 #include "intravisor.h"
+#include "arch.h"
 #include "tfork.h"
 
 #define AT_NULL		0
@@ -152,7 +156,7 @@ struct lkl_dev_blk_ops {
 
 #define MAX_LIBOS_PATH 50
 
-#define MAX_CVMS	10
+#define MAX_CVMS	200
 #if 0
 #define MAX_THREADS	23
 #define STACK_SIZE (0x200000) //2M
@@ -179,8 +183,8 @@ struct c_thread {
 	unsigned long stack_size;
 	int id;
 
-	void *c_tp;
-	void *m_tp;
+	void* __capability c_tp;
+	void* __capability m_tp;
 
 	int argc;
 	char **argv;
@@ -222,6 +226,19 @@ struct box_caps_s {
 	size_t sealcap_size;
 };
 
+struct rela_dyn_s {
+	unsigned long dest;
+	unsigned long addr;
+	unsigned long unknown;
+};
+
+struct cap_relocs_s {
+	unsigned long dst;
+	unsigned long addr;
+	unsigned long unknown;
+	unsigned long len;
+	unsigned long perms;
+};
 
 struct s_box {
 //
@@ -253,6 +270,17 @@ struct s_box {
 	int fd;
 //	
 	char pure;
+	char use_scl;
+
+	struct cap_relocs_s *cr;
+	void *cap_relocs;
+	unsigned long cap_relocs_size;
+	struct rela_dyn_size *rd;
+	void *rela_dyn;
+	unsigned long rela_dyn_size;
+
+	unsigned long end_of_ro;
+	unsigned long extra_load;
 //
 	struct s_box *inner;
 	struct s_box *outer;
@@ -264,6 +292,7 @@ struct s_box {
 	int fork;
 	int use_tfork;
 	uint64_t host_exit_addr;
+	unsigned long cid;
 };
 
 
@@ -302,6 +331,7 @@ extern pthread_mutex_t print_lock;
 unsigned long mon_to_comp(unsigned long addr, struct s_box *sbox);
 unsigned long comp_to_mon(unsigned long addr, struct s_box *sbox);
 unsigned long comp_to_mon_old(unsigned long addr, struct s_box *sbox);
+unsigned long comp_to_mon_force(unsigned long addr, struct s_box *sbox);
 void st_cap(void *loc, void *__capability);
 
 int create_console(int);
@@ -312,38 +342,9 @@ void * __capability pure_codecap_create(void *sandbox_base, void *sandbox_end);
 void * __capability datacap_create(void *sandbox_base, void *sandbox_end);
 #endif
 
-static __inline__ void * getSP(void) {
-    register void * sp asm("sp");
-    asm ("" : "=r"(sp));
-    return sp;
-}
-
-static __inline__ void * getRA(void) {
-    register void * ra asm("ra");
-    asm ("" : "=r"(ra));
-    return ra;
-}
-
-static __inline__ void * getFP(void) {
-    register void * fp asm("s0");
-    asm ("" : "=r"(fp));
-    return fp;
-}
-
-static __inline__ void * getTP(void) {
-    register void * tp asm("tp");
-    asm ("" : "=r"(tp));
-    return tp;
-}
-
-struct cap_relocs_s {
-	unsigned long dst;
-	unsigned long addr;
-	unsigned long unknown;
-	unsigned long len;
-	unsigned long perms;
-};
+struct parser_state *run_yaml_scenario(char *yaml_cfg);
 
 #endif
 
 int daemon_main(int, int, int);
+

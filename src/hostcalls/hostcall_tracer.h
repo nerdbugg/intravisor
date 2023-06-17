@@ -21,4 +21,4 @@ extern FILE* hc_trace_f;
 void init_hc_tracer();
 // add close file function?
 
-#endif HOSTCALL_TRACER_H
+#endif // HOSTCALL_TRACER_H

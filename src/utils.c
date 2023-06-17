@@ -1,4 +1,6 @@
 #include "monitor.h"
+#include <cheri/cheri.h>
+#include <cheri/cheric.h>
 
 uint64_t get_ms_timestamp() {
 	struct timeval t;
@@ -133,3 +135,4 @@ int host_reg_cap(void *ptr, long size, void *location) {
 int host_purge_cap(void *location) {
 	memset(location, 0, 16);
 }
+

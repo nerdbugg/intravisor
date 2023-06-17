@@ -1,30 +1,14 @@
+#include <stdio.h>
+#include <netdb.h>
+#include <assert.h>
+#include <sys/socket.h>
+
 #include "monitor.h"
 #include "tfork.h"
 #include "carrier_thread.h"
-#include <assert.h>
+#include "hostcall_tracer.h"
+#include "host_syscall_callbacs.h"
 
-#include <stdio.h>
-#include "hostcalls/hostcall_tracer.h"
-
-#define __asm_syscall(...) \
-	__asm__ __volatile__ ("ecall\n\t" \
-	: "=r"(a0) : __VA_ARGS__ : "memory"); \
-	return a0; \
-
-static inline long __syscall3(long n, long a, long b, long c)
-{
-	register long t0 __asm__("t0") = n;
-	register long a0 __asm__("a0") = a;
-	register long a1 __asm__("a1") = b;
-	register long a2 __asm__("a2") = c;
-	__asm_syscall("r"(t0), "0"(a0), "r"(a1), "r"(a2))
-}
-
-static __inline__ void * getT5(void) {
-    register void * t5 asm("t5");
-    asm ("" : "=r"(t5));
-    return t5;
-}
 
 // static __inline__ void * getSP
 
@@ -81,6 +65,8 @@ int open_tap(char *ifname) {
 #if __FreeBSD__
 	return open(ifname, O_RDWR | O_NONBLOCK);
 #else
+	printf("%s %d not implemented\n", __FILE__, __LINE__);
+#if 0
 //__linux__
 	struct lkl_netdev *nd;
 	int fd, vnet_hdr_sz = 0;
@@ -139,6 +125,7 @@ int open_tap(char *ifname) {
 
 	return fd;
 #endif
+#endif
 }
 
 
@@ -150,7 +137,7 @@ void cinv2(long, void *, void *, void *);
 
 
 long host_make_call(struct c_thread *ct, void *f, void *arg) {
-    pthread_mutex_lock(&ct->sbox->ct_lock);
+	pthread_mutex_lock(&ct->sbox->ct_lock);
 	int j;
 	for(j = 0; j < MAX_THREADS; j++) {
 		if(ct[j].id == -1)
@@ -164,7 +151,7 @@ long host_make_call(struct c_thread *ct, void *f, void *arg) {
 	int tmp = j;
 
 	ct[tmp].id = tmp;
-    pthread_mutex_unlock(&ct->sbox->ct_lock);
+	pthread_mutex_unlock(&ct->sbox->ct_lock);
 
 	int ret = pthread_attr_init(&ct[tmp].tattr);
 	if(ret != 0) {
@@ -174,7 +161,7 @@ long host_make_call(struct c_thread *ct, void *f, void *arg) {
 	ct[tmp].stack_size = STACK_SIZE;
 	ct[tmp].stack = (void *)(ct[tmp].sbox->cmp_end - ct[tmp].stack_size*(ct[tmp].id+1));
 
-    ret = pthread_attr_setstack(&ct[tmp].tattr, ct[tmp].stack, ct[tmp].stack_size);
+	ret = pthread_attr_setstack(&ct[tmp].tattr, ct[tmp].stack, ct[tmp].stack_size);
 	if(ret != 0) {
 		perror("pthread attr setstack");printf("ret = %d\n", ret);
 	}
@@ -182,7 +169,7 @@ long host_make_call(struct c_thread *ct, void *f, void *arg) {
 	ct[tmp].arg = arg;
 	ct[tmp].func = f;
 //printf("HOST_CALL: CARRIE_THREAD %d %p %p\n", tmp, f, getSP());
-    ret = pthread_create(&ct[tmp].tid, &ct[tmp].tattr, c_thread_body, &ct[tmp]);
+	ret = pthread_create(&ct[tmp].tid, &ct[tmp].tattr, c_thread_body, &ct[tmp]);
 	if(ret != 0) {
 		perror("pthread create");printf("ret = %d\n", ret);
 	}
@@ -194,7 +181,7 @@ long host_make_call(struct c_thread *ct, void *f, void *arg) {
 
 
 
-//////
+#ifdef LKL
 
 struct s_thread {
 	void *f;
@@ -214,6 +201,7 @@ long create_carrie_timer(void *f, void *arg) {
 	return (long) lkl_host_ops.timer_alloc(create_timer_thread, arg);
 }
 
+#endif
 
 
 /************************ HOSTCALLs **************/
@@ -226,7 +214,8 @@ long hostcall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, lon
 	int ct_id = (cvms[cid].cmp_end - (((long) getSP() / STACK_SIZE)*STACK_SIZE))/STACK_SIZE - 1;
 	struct c_thread *ct = get_cur_thread();
 	ct->c_tp = getTP();
-	__asm__ __volatile__("mv tp, %0;" :: "r"(ct->m_tp) : "memory");
+
+	cmv_ctp(ct->c_tp);
 
 #ifdef HC_TRACE
 	hostcall_trace("%d\n", t5);
@@ -243,6 +232,7 @@ long hostcall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, lon
 			wrap_write(ct->sbox->fd, (void *)comp_to_mon(a0, ct->sbox), a1);
 //			wrap_write(ct->sbox->fd, a0, a1);
 			break;
+#ifdef LKL
 //NB: we don't translate sem/mutex-related addresses because they are not used inside compartments
 		case 3:
 			ret = (long) lkl_host_ops.sem_alloc(a0);
@@ -359,38 +349,6 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 				notify_other_thread_save(ct);
 			}
 			break;
-
-///
-//MATH.SIN
-/// 
-		case 116:
-			// printf("math.sin x=%f ", *(double *)(&a0));
-			ret = 0;
-			double y = cos(*(double *)(&a0));
-			// printf("y=%f\n", y);
-			ret = *(long *)(&y);
-			break;
-
-///
-// REGISTER SIGNAL
-/// 
-		// case 117:
-		// 	ret = 0;
-		// 	void (*handler)(int) = comp_to_mon(a0, ct->sbox);
-		// 	printf("register signal handler, signum=%d, handler=%p\n", SIGSAVE, handler);
-			
-		// 	struct sigaction sa;
-		// 	sa.sa_sigaction = handler;
-		// 	sigemptyset(&sa.sa_mask);
-		// 	sa.sa_flags = SA_SIGINFO;
-
-		// 	if (sigaction(SIGSAVE, &sa, NULL) == -1)
-		// 	{
-		// 		perror("sigaction");
-		// 		exit(1);
-		// 	}
-
-		// 	break;
 ////
 //NETWORK
 ////
@@ -411,6 +369,35 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 			printf("TODO: %d\n", __LINE__);
 			fd_net_ops.free(a0);
 			break;
+#else
+		// exit
+		case 13:
+			destroy_carrie_thread(ct->sbox->threads);
+			break;
+		// nanosleep
+		case 200:
+			ret = nanosleep((struct timespec*)comp_to_mon(a0, ct->sbox),
+					(struct timespec*)comp_to_mon(a1, ct->sbox));
+			break;
+////
+//INSPECT
+////
+		case 114:
+			ret = (ct->sbox->t_cid == -1);
+			break;
+///
+//SAVE
+/// 
+		case 115:
+			// when cvm is configured fork:0, just return
+			if (!ct->sbox->fork)
+				break;
+			ct->notified = true;
+			if (ct == ct->sbox->threads) {
+				notify_other_thread_save(ct);
+			}
+			break;
+#endif
 ////
 //HOST CALLS
 //// these 3 calls are used for networking. 
@@ -466,14 +453,15 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 			break;
 
 
-//#define USE_HOST_NET
+// note: forward syscall to host kernel
+#define USE_HOST_NET
 #ifdef USE_HOST_NET
 		case 500:
 			ret = (int) socket(a0, a1, a2);
 //			printf("ret = %d, a0 = %d a1 = %d a2 = %d\n", ret, a0, a1, a2);perror("socket");
 			break;
 		case 501:
-			ret = (int) setsockopt(a0, a1, a2, a3, a4);
+			ret = (int) setsockopt(a0, a1, a2, comp_to_mon(a3, ct->sbox), a4);
 //			printf("ret = %d, a0 = %d a1 = %d a2 = %d %d %d \n", ret, a0, a1, a2, a3, a4);perror("setcodk");
 			break;
 		case 502:
@@ -482,16 +470,23 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 //			perror("ioctl");
 			break;
 		case 503:
-			ret = (int) accept4((int) a0, (struct sockaddr *) a1, (socklen_t *)a2, (int) a3);
+			ret = (int) accept4((int) a0, 
+						(struct sockaddr *) comp_to_mon(a1, ct->sbox), 
+						(socklen_t *) comp_to_mon(a2,ct->sbox), 
+						(int) a3);
 			break;
 		case 504:
 			ret = (int) listen(a0, a1);
 			break;
 		case 505:
-			ret = (int) accept((int) a0, (struct sockaddr *) a1, (socklen_t *) a2);
+			ret = (int) accept((int) a0, 
+						(struct sockaddr *) comp_to_mon(a1, ct->sbox), 
+						(socklen_t *) comp_to_mon(a2, ct->sbox));
 			break;
 		case 506:
-			ret = (int) bind(a0, (const struct sockaddr *)a1, a2);
+			ret = (int) bind(a0, 
+						(const struct sockaddr *) comp_to_mon(a1, ct->sbox),
+						a2);
 			break;
 		case 507:
 			ret =  write( (int) a0, (void *) a1, (size_t) a2);
@@ -500,10 +495,14 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 			ret = read((int) a0, (void *)a1, (size_t) a2);
 			break;
 		case 509:
-			ret = send((int) a0, (void *)a1, (size_t) a2, (int) a3);
+			ret = send((int) a0, 
+					(void *) comp_to_mon(a1, ct->sbox),
+					(size_t) a2, (int) a3);
 			break;
 		case 510:
-			ret = recv((int) a0, (void *)a1, (size_t) a2, (int) a3);
+			ret = recv((int) a0,
+					(void *) comp_to_mon(a1, ct->sbox),
+					(size_t) a2, (int) a3);
 			break;
 		case 511:
 			ret = (int) close((int) a0);
@@ -511,6 +510,7 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 		case 512:
 			ret = (int) socketpair((int) a0, (int) a1, (int) a2, a3);
 			break;
+#if 0
 #ifdef __linux__
 		case 513:
 			ret = epoll_create((int) a0);
@@ -531,6 +531,18 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 			ret = epoll_pwait((int) a0, (struct epoll_event *) a1, (int) a2, (int) a3, (sigset_t *) a4);
 			break;
 #endif
+#else
+		case 513:
+			ret = poll(comp_to_mon(a0, ct->sbox), a1, a2);
+			break;
+		case 514:
+			ret = select(a0, 
+					(fd_set*) comp_to_mon(a1, ct->sbox),
+					(fd_set*) comp_to_mon(a2, ct->sbox),
+					(fd_set*) comp_to_mon(a3, ct->sbox),
+					(struct timeval*) comp_to_mon(a4, ct->sbox));
+			break;
+#endif
 		case 519:
 			ret = recvfrom((int) a0, (void *restrict ) a1, (size_t) a2, (int) a3, (struct sockaddr *restrict) a4, (socklen_t *restrict) a5);
 			break;
@@ -538,10 +550,86 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 			ret = writev((int) a0, (const struct iovec *) a1, (int) a2);
 			break;
 #endif
+		case 530:
+			// int getaddrinfo(const char *, const char *, const struct addrinfo *, struct addrinfo **);
+			ret = getaddrinfo((char*) comp_to_mon(a0, ct->sbox),
+						(char*) comp_to_mon(a1, ct->sbox),
+						(struct addrinfo*) comp_to_mon(a2, ct->sbox),
+						(struct addrinfo**) comp_to_mon(a3, ct->sbox));
+			break;
+		case 531:
+			ret = getpeereid(a0, (uid_t*)comp_to_mon(a1, ct->sbox), (gid_t*)comp_to_mon(a2, ct->sbox));
+			break;
+		case 532:
+			ret = connect(a0, (struct sockaddr*) comp_to_mon(a1, ct->sbox), a2);
+			break;
 
 		case 700:
 			ret = host_get_my_inner(ct->sbox, comp_to_mon(a0, ct->sbox));
 			break;
+		case 701:
+			ret = host_syscall_handler_prb((char*)comp_to_mon(a0, ct->sbox),
+							(void*)comp_to_mon(a1, ct->sbox),
+							(void*)comp_to_mon(a2, ct->sbox),
+							(void*)comp_to_mon(a3, ct->sbox));
+			break;
+		case 702:
+			ret = host_get_sc_caps(a0, a1, a2);
+			break;
+
+		case 800:
+			ret = gettimeofday((struct timeval*)comp_to_mon(a0, ct->sbox), 
+						(struct timezone*)comp_to_mon(a1, ct->sbox));
+			break;
+		case 801:
+			ret = lstat((char*)comp_to_mon(a0, ct->sbox), (struct stat*)comp_to_mon(a1, ct->sbox));
+			break;
+		case 806:
+			ret = stat((char*)comp_to_mon(a0, ct->sbox), (struct stat*)comp_to_mon(a1, ct->sbox));
+			break;
+		case 807:
+			ret = fstat(a0, (struct stat*)comp_to_mon(a1, ct->sbox));
+//			printf("fstat: st_dev = %x, st_ino = %x\n", statbuf.st_dev, statbuf.st_ino);
+			break;
+		case 802:
+			ret = unlink((char*)comp_to_mon(a0, ct->sbox));
+			break;
+		case 803:
+			ret = close(a0);
+			break;
+		case 804:
+			ret = access((char*)comp_to_mon(a0, ct->sbox), a1);
+			break;
+		case 808:
+			ret = truncate((char*)comp_to_mon(a0, ct->sbox), a1);
+			break;
+		case 809:
+//			printf("read = %d, %p, %d\n", a0, comp_to_mon(a1, ct->sbox), a2);
+			ret = read(a0, (void*)comp_to_mon(a1, ct->sbox), a2);
+//			printf("read ret = %d\n", ret);
+			break;
+		case 810:
+			ret = write(a0, (void*)comp_to_mon(a1, ct->sbox), a2);
+			break;
+		case 811:
+//			ret = open(comp_to_mon(a0, ct->sbox), a1, a2);
+			ret = open((char*)comp_to_mon(a0, ct->sbox), O_RDWR | O_CREAT, 0666);
+			break;
+		case 812:
+//			printf("lseek set %d %d %d\n", a0, a1, a2);
+			ret = lseek(a0, a1, a2);
+//			printf("lseek ret = %d\n", ret);
+			break;
+
+		case 813:
+			ret = errno;
+//			perror("syscall:");
+			break;
+
+		case 814:
+			ret = fcntl(a0, a1, comp_to_mon(a3, ct->sbox));
+			break;
+
 
 		default:
 			printf("unknown t5 %ld\n", t5);
@@ -564,7 +652,7 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 		printf("TP has changed %p %p\n", getTP(), ct->m_tp);
 	}
 
-	__asm__ __volatile__("mv tp, %0;" :: "r"(ct->c_tp) : "memory");
+	cmv_ctp(ct->c_tp);
 
 	return ret;
 }
