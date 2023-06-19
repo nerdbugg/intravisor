@@ -39,7 +39,12 @@ void * __capability codecap_create(void *sandbox_base, void *sandbox_end)
 {
   void * __capability codecap;
   codecap = cheri_codeptrperm(sandbox_base, ((size_t)sandbox_end - (size_t)sandbox_base),
-	  CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | CHERI_PERM_STORE | CHERI_PERM_EXECUTE | CHERI_PERM_CCALL);
+	  CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | CHERI_PERM_STORE | CHERI_PERM_EXECUTE | 
+#ifdef CHERI_PERM_CCALL
+	  CHERI_PERM_CCALL);
+#else
+	  CHERI_PERM_INVOKE);
+#endif
 
   return (codecap);
 }
@@ -48,7 +53,12 @@ void * __capability pure_codecap_create(void *sandbox_base, void *sandbox_end)
 {
   void * __capability codecap;
   codecap = cheri_codeptrperm(sandbox_base, ((size_t)sandbox_end - (size_t)sandbox_base),
-	  CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP | CHERI_PERM_STORE | CHERI_PERM_EXECUTE | CHERI_PERM_CCALL);
+	  CHERI_PERM_GLOBAL | CHERI_PERM_LOAD | CHERI_PERM_LOAD_CAP | CHERI_PERM_STORE | CHERI_PERM_EXECUTE | 
+#ifdef CHERI_PERM_CCALL
+	  CHERI_PERM_CCALL);
+#else
+	  CHERI_PERM_INVOKE);
+#endif
 
   codecap = cheri_capmode(codecap);
 
@@ -67,7 +77,11 @@ void * __capability datacap_create(void *sandbox_base, void *sandbox_end)
 // we remove these two permisions to avoid using of revoked caps
 	  CHERI_PERM_STORE_CAP |
       CHERI_PERM_STORE_LOCAL_CAP | 
+#ifdef CHERI_PERM_CCALL
 	  CHERI_PERM_CCALL);
+#else
+	  CHERI_PERM_INVOKE);
+#endif
 
   return (datacap);
 }

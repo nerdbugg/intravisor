@@ -1,7 +1,11 @@
+#include <sys/thr.h>
+
 #include "monitor.h"
 #include "cvm/log.h"
 #include "utils.h"
 #include "hostcalls/host_syscall_callbacs.h"
+
+int gen_caps(struct s_box *cvm, struct c_thread *ct);
 
 // When init template cvm, we must make sure stack memory is accessable by using mmap.
 int init_pthread_stack(struct s_box *cvm)
@@ -245,7 +249,7 @@ void *init_thread(int cid)
     int cenv_size = 0;
     // sp 是栈顶指针(位于低地址), 初始化栈按地址增长方向, 依次存放 argc, argv, envs
     sp[0] = me->argc;
-#ifdef HVB_CVM
+#ifdef HYB_CVM
     sp[1] = (unsigned long)(mon_to_comp(argv1, me->sbox));
 #else
     sp[1] = 0xaa;

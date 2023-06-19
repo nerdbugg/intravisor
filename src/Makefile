@@ -19,6 +19,8 @@ CFLAGS	:= -I . -I lkl_wrap/include -I load_elf/ -I tfork/ -I lkl_wrap -I libyaml
 	   -I arch/$(TARGET_ARCH)/include -DTARGET_ARCH="$(TARGET_ARCH)" -D$(TARGET_ARCH) -DCVM_MAX_SIZE=$(CONFIG_CVM_MAX_SIZE)
 CFLAGS += -DEXTRA_PAYLOAD="(0)"
 
+CFLAGS += -DHYB_CVM
+
 ifdef TFORK
   CFLAGS += -DTFORK
 endif

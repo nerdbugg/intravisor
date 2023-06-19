@@ -102,7 +102,7 @@ void load_elf(char* file_to_map, void *base_addr, encl_map_info* result) {
     	Elf64_Shdr *sh_strtab = &shdr[hdr->e_shstrndx];
     	const char *const sh_strtab_p = mapped + sh_strtab->sh_offset;
 
-    	printf("type: %d, name = %s\n", sections[i].sh_type, sh_strtab_p + sections[i].sh_name);
+    	dlog("type: %d, name = %s\n", sections[i].sh_type, sh_strtab_p + sections[i].sh_name);
 
     	if(strncmp("__cap_relocs", sh_strtab_p + sections[i].sh_name, strlen("__cap_relocs")) == 0) {
     	    if(result->cap_relocs) {
