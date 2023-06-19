@@ -510,7 +510,7 @@ void *init_thread(int cid)
     dlog("HW: sp = %p, tp = %p\n", sp, me->c_tp);
     dlog("-----------------------------------------------\n");
 #ifdef HYB_CVM
-    unsigned long* tp_args = me->c_tp + me->sbox->cmp_begin;
+    unsigned long* tp_args = (__cheri_fromcap unsigned long*)me->c_tp + me->sbox->cmp_begin;
 #else
     unsigned long* tp_args = (__cheri_fromcap unsigned long*)(me->c_tp);
 #endif
