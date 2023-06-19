@@ -509,8 +509,11 @@ void *init_thread(int cid)
     dlog("[%3d ms]: finish init_thread\n", gettime());
     dlog("HW: sp = %p, tp = %p\n", sp, me->c_tp);
     dlog("-----------------------------------------------\n");
-
+#ifdef HYB_CVM
+    unsigned long* tp_args = me->c_tp + me->sbox->cmp_begin;
+#else
     unsigned long* tp_args = (__cheri_fromcap unsigned long*)(me->c_tp);
+#endif
     // note: local_cap_store addr, bottom of a reserved cvm stack with a page size
     tp_args[0] = me->sbox->top - me->sbox->stack_size + 0x1000;
     tp_args[1] = me->sbox->cid;
