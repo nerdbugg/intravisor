@@ -42,6 +42,12 @@ static __inline__ void mv_sp(unsigned long sp)
                          : "memory");
 }
 
+static __inline__ void mv_tp(unsigned long tp)
+{
+    __asm__ __volatile__("mv tp, %0;" ::"r"(tp)
+            : "memory");
+}
+
 static __inline__ void cmv_ctp(void* __capability ctp)
 {
     __asm__ __volatile__("cmove ctp, %0;" ::"C"(ctp)

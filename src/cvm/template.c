@@ -82,7 +82,7 @@ int argc, char *argv[]
         // cvms[cid].use_scl = 2; //todo, should be a list of SCL it uses
         cvms[cid].cr = (struct cap_relocs_s *) encl_map.cap_relocs;
     	cvms[cid].cap_relocs_size = encl_map.cap_relocs_size;
-	cvms[cid].cap_relocs = encl_map.cap_relocs;
+	    cvms[cid].cap_relocs = encl_map.cap_relocs;
         struct cap_relocs_s *cr = (struct cap_relocs_s *)encl_map.cap_relocs;
         for (int j = 0; j < encl_map.cap_relocs_size / sizeof(struct cap_relocs_s); j++) {
             dlog("Create cap: %p Base: %p Length: %ld Perms: %lx Unk = %ld\n", f->isol.base + cr[j].dst, cr[j].addr, cr[j].len, cr[j].perms, cr[j].unknown);
@@ -238,13 +238,14 @@ void *init_thread(int cid)
     snprintf(env5, 128, "PYTHONDEBUG=3");
     //	snprintf(env5, 128, "_PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata");
 
-    me->m_tp = getTP();
-    me->c_tp = (void *)(me->stack + 4096);
+    me->m_tp = (__cheri_fromcap void *)getTP();
+    me->c_tp = me->stack + 4096;
 
     char *cenv = (char *)(sp_read - 4096 * 3);         // originally, here was *2, but networking corrupts this memory
     volatile unsigned long *sp = (sp_read - 4096 * 4); // I don't know why, but without volatile sp gets some wrong value after initing CENV in -O2
 
-    dlog("target SP = %lx, old TP = %lx sp_read = %p, me->stacl = %p, getSP()=%p, me->c_tp = %p\n", sp, getTP(), sp_read, me->stack, getSP(), me->c_tp);
+    dlog("target SP = 0x%lx, old TP = %p sp_read = %p, me->stacl = %p, getSP()=%p, me->c_tp = %p\n",
+         (unsigned long)sp, (__cheri_fromcap void *)getTP(), sp_read, me->stack, getSP(), me->c_tp);
 
     int cenv_size = 0;
     // sp 是栈顶指针(位于低地址), 初始化栈按地址增长方向, 依次存放 argc, argv, envs
@@ -510,7 +511,7 @@ void *init_thread(int cid)
     dlog("HW: sp = %p, tp = %p\n", sp, me->c_tp);
     dlog("-----------------------------------------------\n");
 #ifdef HYB_CVM
-    unsigned long* tp_args = (__cheri_fromcap unsigned long*)me->c_tp + me->sbox->cmp_begin;
+    unsigned long* tp_args = me->c_tp + me->sbox->cmp_begin;
 #else
     unsigned long* tp_args = (__cheri_fromcap unsigned long*)(me->c_tp);
 #endif
@@ -522,7 +523,7 @@ void *init_thread(int cid)
     // TODO: use asm here to avoid &conv_args value change due to the change of $sp?
     __asm__ __volatile__("mv sp, %0;" ::"r"(sp)
                          : "memory");
-    cmv_ctp(me->c_tp);
+    mv_tp((unsigned long)me->c_tp);
 
     cinv(
 #if 0

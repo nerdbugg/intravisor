@@ -183,8 +183,8 @@ struct c_thread {
 	unsigned long stack_size;
 	int id;
 
-	void* __capability c_tp;
-	void* __capability m_tp;
+	void* c_tp;
+	void* m_tp;
 
 	int argc;
 	char **argv;
@@ -343,8 +343,8 @@ void * __capability datacap_create(void *sandbox_base, void *sandbox_end);
 #endif
 
 struct parser_state *run_yaml_scenario(char *yaml_cfg);
+int daemon_main(int, int, int);
 
 #endif
 
-int daemon_main(int, int, int);
 

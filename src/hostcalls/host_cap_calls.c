@@ -28,7 +28,7 @@ void *c_call_thread_body(void *carg) {
 
 	long addr = (long) me->arg; //there is no mon_to_cap here because in all cases the args are cap-relative
 
-	me->m_tp = getTP();
+	me->m_tp = (__cheri_fromcap void *)getTP();
 	me->c_tp = (void *)(me->stack+4096);
 
 	printf("me->func = %p, addr=0x%ld, sp = %p\n", me->func, addr, getSP());
@@ -64,7 +64,7 @@ void *c_call_thread_body(void *carg) {
 	void * __capability sealed_datacap = cheri_seal(dcap, sealcap);
 	void * __capability sealed_codecap = cheri_seal(ccap, sealcap);
 
-	me->c_tp = mon_to_comp(me->c_tp, me->sbox->cmp_begin);
+	me->c_tp = (void*)mon_to_comp((unsigned long) me->c_tp, me->sbox);
 
 	struct stream_caps_store *cs = me->cs;
 
@@ -75,7 +75,7 @@ repeat:
 	pthread_cond_signal(&cs->call_lock2.cond); 
 	pthread_mutex_unlock(&cs->call_lock2.lock); 
 
-	cmv_ctp(me->c_tp);
+	mv_tp((unsigned long)me->c_tp);
 
 	cinv2(addr,
 		  sealed_codecap,  	//entrance
@@ -83,7 +83,7 @@ repeat:
 		  dcap 			//compartment data cap
 		);
 
-	cmv_ctp(me->m_tp);
+	mv_tp((unsigned long)me->m_tp);
 
 	pthread_mutex_lock(&cs->call_lock.lock);
 	if( ! cs->call_lock.predicate ) pthread_cond_wait(&cs->call_lock.cond, &cs->call_lock.lock); 

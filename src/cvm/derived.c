@@ -38,7 +38,7 @@ int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[])
     ct[0].argc = argc;
     ct[0].argv = argv;
 
-    ct->m_tp = getTP();
+    ct->m_tp = (__cheri_fromcap void *)getTP();
     ct->c_tp = (void *)(ct->stack + PAGE_SIZE);
 
 #ifdef __linux__

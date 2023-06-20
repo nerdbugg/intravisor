@@ -10,7 +10,7 @@ void *c_thread_body(void *carg) {
 
 	long addr = (long) me->arg; //there is no mon_to_cap here because in all cases the args are cap-relative
 
-	me->m_tp = getTP();
+	me->m_tp = (__cheri_fromcap void *)getTP();
 	me->c_tp = (void *)(me->stack+4096);
 	thr_self(&me->task_id);
 
@@ -54,7 +54,7 @@ void *c_thread_body(void *carg) {
 
 repeat:
 
-	cmv_ctp(me->c_tp);
+	mv_tp((unsigned long)me->c_tp);
 	// note: change sp to comparted-mode in cinv2
 	
 //inline doesnt work like this
@@ -64,7 +64,7 @@ repeat:
 		  dcap 			//compartment data cap
 		);
 
-	cmv_ctp(me->m_tp);
+	mv_tp((unsigned long)me->m_tp);
 	goto repeat;
 
 #endif

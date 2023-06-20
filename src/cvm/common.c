@@ -1,6 +1,13 @@
 #include "monitor.h"
 #include "cvm/log.h"
+#include "tfork.h"
+#include "utils.h"
 #include <assert.h>
+
+extern void *init_thread(int cid);
+extern int init_pthread_stack(struct s_box *cvm);
+extern int build_cvm(int cid, struct cvm *f, int argc, char *argv[]);
+extern int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[]);
 
 extern unsigned long TFORK_FAILED;
 
@@ -131,11 +138,9 @@ void create_and_start_cvm(struct cvm *f)
 	    int fd = cvm_snapshot_fd[t_cid];
 	    assert(fd>0);
 
-            // todo: find contiguous memory segments and merge mappings
-            // todo: using mprotect to devide it into multiple segments
-            map_entry *last = NULL;
-            size_t map_size = 0;
-            unsigned long map_start = NULL;
+        map_entry *last = NULL;
+        size_t map_size = 0;
+        unsigned long map_start = NULL;
 	    unsigned long file_offset = 0l;
 	    map_entry* p = map_entry_list;
 	    while(p) {

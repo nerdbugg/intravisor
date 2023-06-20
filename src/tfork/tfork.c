@@ -159,7 +159,7 @@ void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
 // note: restore main thread of cvm (from half of tp_write function)
 void gen_caps_restored(struct c_thread *target_thread)
 {
-    target_thread->m_tp = getTP();
+    target_thread->m_tp = (__cheri_fromcap void *)getTP();
     target_thread->c_tp = (void *)(target_thread->stack + 4096);
 
     struct s_box *cvm = target_thread->sbox;
@@ -226,7 +226,7 @@ long load_ucontext(struct c_thread *target_thread)
     cvm = target_thread->sbox;
     t_cvm = &cvms[cvm->t_cid];
 
-    target_thread->m_tp = getTP();
+    target_thread->m_tp = (__cheri_fromcap void *)getTP();
     target_thread->c_tp = (void *)(target_thread->stack + 4096);
 
     memset(&uctx, 0, sizeof(uctx));
