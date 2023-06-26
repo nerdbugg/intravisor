@@ -428,7 +428,7 @@ void *init_thread(int cid)
     } cinv_args;
 
     cinv_args.caps[0] = sealed_codecap;
-    dlog("ca0: sealed COMP PPC\n");
+    dlog("ca0: sealed COMP PCC\n");
     CHERI_CAP_PRINT(cinv_args.caps[0]);
 
     cinv_args.caps[1] = sealed_datacap;
@@ -519,11 +519,11 @@ void *init_thread(int cid)
     tp_args[0] = me->sbox->top - me->sbox->stack_size + 0x1000;
     tp_args[1] = me->sbox->cid;
 
+    mv_tp((unsigned long)me->c_tp);
     // TODO: may corrupt cinv_args?
     // TODO: use asm here to avoid &conv_args value change due to the change of $sp?
     __asm__ __volatile__("mv sp, %0;" ::"r"(sp)
                          : "memory");
-    mv_tp((unsigned long)me->c_tp);
 
     cinv(
 #if 0
