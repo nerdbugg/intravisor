@@ -68,8 +68,9 @@ cinv:
 		cmove	cra, ca0
 
 		lc	ca0, (16*0)(a1)
-		lc	ca1, (16*1)(a1)
 		lc	ca2, (16*2)(a1)
+
+		lc	ca1, (16*1)(a1)
 
 		cspecialw	ddc, ca2
 		CInvoke ca0, ca1

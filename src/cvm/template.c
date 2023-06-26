@@ -5,6 +5,12 @@
 #include "utils.h"
 #include "hostcalls/host_syscall_callbacs.h"
 
+struct cinv_s
+{
+    void *__capability caps[10];
+};
+
+void cinv(void* local_cap_store, struct cinv_s* args);
 int gen_caps(struct s_box *cvm, struct c_thread *ct);
 
 // When init template cvm, we must make sure stack memory is accessable by using mmap.
@@ -422,10 +428,7 @@ void *init_thread(int cid)
     void *__capability sealed_datacapt = me->sbox->box_caps.sealed_datacapt;
     void *__capability sealed_ret_from_mon = me->sbox->box_caps.sealed_ret_from_mon;
 
-    struct cinv_s
-    {
-        void *__capability caps[10];
-    } cinv_args;
+    struct cinv_s cinv_args;
 
     cinv_args.caps[0] = sealed_codecap;
     dlog("ca0: sealed COMP PCC\n");
