@@ -28,7 +28,7 @@ void *c_call_thread_body(void *carg) {
 
 	long addr = (long) me->arg; //there is no mon_to_cap here because in all cases the args are cap-relative
 
-	me->m_tp = (__cheri_fromcap void *)getTP();
+	me->m_tp = getTP();
 	me->c_tp = (void *)(me->stack+4096);
 
 	printf("me->func = %p, addr=0x%ld, sp = %p\n", me->func, addr, getSP());

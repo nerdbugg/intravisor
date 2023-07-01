@@ -6,7 +6,14 @@ static __inline__ void* getSP(void)
     return sp;
 }
 
-static __inline__ void* __capability getTP(void)
+static __inline__ void* getTP(void)
+{
+    register void* tp asm("tp");
+    asm("" : "=r"(tp));
+    return tp;
+}
+
+static __inline__ void* __capability getCTP(void)
 {
     register void* __capability ctp asm("ctp");
     asm("" : "=C"(ctp));

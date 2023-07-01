@@ -213,9 +213,9 @@ long hostcall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, lon
 	int cid = (long) getSP() / 0x10000000;
 	int ct_id = (cvms[cid].cmp_end - (((long) getSP() / STACK_SIZE)*STACK_SIZE))/STACK_SIZE - 1;
 	struct c_thread *ct = get_cur_thread();
-	ct->c_tp = (__cheri_fromcap void *)getTP();
+	ct->c_tp = getTP();
 
-	mv_tp((unsigned long)ct->c_tp);
+	mv_tp((unsigned long)ct->m_tp);
 
 #ifdef HC_TRACE
 	hostcall_trace("%d\n", t5);
@@ -648,8 +648,8 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 		save_cur_thread_and_exit(sboxptr_to_cid(ct->sbox), ct);
 	}
 
-	if((__cheri_fromcap void *)getTP() != ct->m_tp) {
-		printf("TP has changed %p %p\n", (__cheri_fromcap void *)getTP(), ct->m_tp);
+	if(getTP() != ct->m_tp) {
+		printf("TP has changed %p %p\n", getTP(), ct->m_tp);
 	}
 
 	mv_tp((unsigned long)ct->c_tp);

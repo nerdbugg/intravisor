@@ -244,14 +244,14 @@ void *init_thread(int cid)
     snprintf(env5, 128, "PYTHONDEBUG=3");
     //	snprintf(env5, 128, "_PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata");
 
-    me->m_tp = (__cheri_fromcap void *)getTP();
+    me->m_tp = getTP();
     me->c_tp = me->stack + 4096;
 
     char *cenv = (char *)(sp_read - 4096 * 3);         // originally, here was *2, but networking corrupts this memory
     volatile unsigned long *sp = (sp_read - 4096 * 4); // I don't know why, but without volatile sp gets some wrong value after initing CENV in -O2
 
     dlog("target SP = 0x%lx, old TP = %p sp_read = %p, me->stacl = %p, getSP()=%p, me->c_tp = %p\n",
-         (unsigned long)sp, (__cheri_fromcap void *)getTP(), sp_read, me->stack, getSP(), me->c_tp);
+         (unsigned long)sp, getTP(), sp_read, me->stack, getSP(), me->c_tp);
 
     int cenv_size = 0;
     // sp 是栈顶指针(位于低地址), 初始化栈按地址增长方向, 依次存放 argc, argv, envs
