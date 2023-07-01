@@ -1,3 +1,4 @@
+#include "crt.h"
 #include "hostcalls.h"
 
 int main() {
@@ -12,5 +13,8 @@ int main() {
 	host_write(buf, 32);
 
 	host_exit();
+
+	// never reached
+	return 0;
 }
 
