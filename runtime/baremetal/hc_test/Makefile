@@ -9,15 +9,15 @@ ifneq ($(MODE),sim)
 endif
 
 DEPS = 
-OBJ = hc_test.o tramps.o hostcalls.o #crt.o
+OBJ = hc_test.o tramps.o hostcalls.o crt.o
 
 default: libhc_test_debug.so
 
 %.o: %.c $(DEPS)
 	$(CC_CHERI) $(CC_CHERI_FLAGS) -c -o $@ $< $(CFLAGS)
 
-#crt.o: crt.S
-	#$(CC_CHERI) $(CC_CHERI_FLAGS) $(CFLAGS) -c -o $@ $^
+crt.o: crt.S
+	$(CC_CHERI) $(CC_CHERI_FLAGS) $(CFLAGS) -c -o $@ $^
 
 tramps.o: tramps.S
 	$(CC_CHERI) $(CC_CHERI_FLAGS) $(CFLAGS) -c -o $@ $^

@@ -17,5 +17,5 @@ START :
     .hidden _DYNAMIC
     lla a1, _DYNAMIC
     andi sp, sp, -16
-    tail main
-
+    call main
+    tail host_exit

@@ -1,4 +1,3 @@
-#include "crt.h"
 #include "hostcalls.h"
 
 int main() {
