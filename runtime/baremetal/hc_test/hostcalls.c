@@ -17,6 +17,11 @@ void host_exit() {
 	c_out_2(tmp, 0, 0);
 }
 
+void host_save() {
+	int tmp = 115;
+	c_out_2(tmp, 0, 0);
+}
+
 int host_cap_prb(char *key, void *location, long *size) {
 	int tmp = 406;
 	return c_out_3(tmp, (unsigned long)key, (unsigned long)location, (unsigned long)size);

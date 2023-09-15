@@ -12,7 +12,9 @@ int main() {
 	copy_from_cap(buf, cap, 32);
 	host_write(buf, 32);
 
-	host_exit();
+	host_save();
+
+	host_write("Hello World! After Save\n", 24);
 
 	// never reached
 	return 0;

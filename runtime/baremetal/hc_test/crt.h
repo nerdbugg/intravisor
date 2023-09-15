@@ -14,7 +14,8 @@ void _start(void)
         ".hidden _DYNAMIC\n\t"
         "lla a1, _DYNAMIC\n\t"
         "andi sp, sp, -16\n\t"
-        "tail main"
+        "call main\n\t"
+        "tail host_exit\n\t"
     );
     // never reach
 }

@@ -10,4 +10,5 @@ extern void copy_from_cap(void *dst, void *src_cap_location, int len);
 int host_write(char *ptr, int size);
 int host_cap_prb(char *key, void *location, long *size);
 void host_exit();
+void host_save();
 
