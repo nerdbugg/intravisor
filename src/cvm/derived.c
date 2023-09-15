@@ -1,4 +1,4 @@
-#include "../monitor.h"
+#include "monitor.h"
 
 int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[])
 {
@@ -25,7 +25,7 @@ int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[])
     // todo: cvm->disk_image, when running baremetal, disk_image is NULL;
     struct c_thread *ct = cvm->threads;
     pthread_t cur_cid = pthread_self();
-    // printf("cur_cid = pthread_self(), tid=0x%x\n", cur_cid);
+    // note: initialize new thread with template threads
     memcpy(ct, t_cvm->threads, sizeof(struct c_thread));
     ct->tid = cur_cid;
     for (int i = 0; i < MAX_THREADS; i++)
@@ -60,4 +60,5 @@ int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[])
 #endif
     // fork_cvm shouldn't call gen_caps because caps will be generated in functon: load.
     // gen_caps(cvm, ct);
+    return 0;
 }

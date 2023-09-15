@@ -396,6 +396,8 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 			if (ct == ct->sbox->threads) {
 				notify_other_thread_save(ct);
 			}
+			// executed during return if notified==true
+			// save_cur_thread_and_exit(cid, ct);
 			break;
 #endif
 ////
