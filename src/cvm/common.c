@@ -1,8 +1,10 @@
+#include <assert.h>
+
 #include "monitor.h"
 #include "cvm/log.h"
 #include "tfork.h"
 #include "utils.h"
-#include <assert.h>
+#include "hostcalls/fs/fd.h"
 
 extern void *init_thread(int cid);
 extern int init_pthread_stack(struct s_box *cvm);
@@ -118,12 +120,14 @@ void create_and_start_cvm(struct cvm *f)
     cvm->cmp_end = f->isol.end;
     cvm->box_size = f->isol.size;
     ct->stack_size = (MAX_THREADS + 1) * STACK_SIZE;
-    ct->stack = cvm->cmp_end - ct->stack_size;
+    ct->stack = (void*)(cvm->cmp_end - ct->stack_size);
 
     int t_cid = find_template(cid, f->runtime);
     cvm->t_cid = t_cid;
     cvm->fork = f->fork;
     cvm->use_tfork = (cvm->t_cid > 0) && cvm->fork;
+    // init cvm fdtable
+    fdtable_init(&(cvm->fdtable));
 
     if (cvm->use_tfork == false)
     {

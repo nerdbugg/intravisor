@@ -60,6 +60,7 @@
 #include "intravisor.h"
 #include "arch.h"
 #include "tfork.h"
+#include "hostcalls/fs/fd.h"
 
 #define AT_NULL		0
 #define AT_IGNORE	1
@@ -268,6 +269,7 @@ struct s_box {
 	char disk_image[100];		//path to the disk
 // OUTPUT
 	int fd;
+  fdtable fdtable;
 //	
 	char pure;
 	char use_scl;
@@ -294,6 +296,8 @@ struct s_box {
 	uint64_t host_exit_addr;
 	unsigned long cid;
 };
+
+typedef struct s_box s_box;
 
 
 struct cmp_s {

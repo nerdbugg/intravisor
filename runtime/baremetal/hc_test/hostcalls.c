@@ -7,9 +7,14 @@
 // (dirty hack:specify a hard coded length of array to distinguish it from other data reloc)
 unsigned long local_cap_store = 0xe001000;
 
-int host_write(char *ptr, int size) {
+int host_print(char *ptr, int size) {
 	int tmp = 1;
 	return c_out_2(tmp, (unsigned long)ptr, size);
+}
+
+int host_write(int fd, const char* buf, int size) {
+  int tmp = 507;
+  return c_out_3(tmp, fd, (long)buf, size);
 }
 
 void host_exit() {

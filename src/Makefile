@@ -11,7 +11,8 @@ SRC_TFORK := tfork/tfork.c
 SRC_CVM := cvm/derived.c cvm/template.c cvm/common.c
 SRC_DAEMON := daemon.c
 SRC_HOSTCALL := hostcalls/hostcalls.c hostcalls/carrie_thread.c hostcalls/host_cap_calls.c hostcalls/host_cap_files.c \
-		hostcalls/host_syscall_callbacs.c hostcalls/hostcall_tracer.c hostcalls/host_sc.c
+		hostcalls/host_syscall_callbacs.c hostcalls/hostcall_tracer.c hostcalls/host_sc.c \
+		hostcalls/fs/fd.c
 
 CFILES  := $(SRC_LKL)  $(SRC_LOADER) $(SRC_YAML) $(SRC_TFORK) $(SRC_CVM) $(SRC_DAEMON) $(SRC_HOSTCALL)
 ASFILES := arch/riscv/asm.S

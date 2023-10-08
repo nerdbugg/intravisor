@@ -9,6 +9,7 @@
 #include "cvm/log.h"
 #include "hostcalls/host_syscall_callbacs.h"
 #include "hostcalls/hostcall_tracer.h"
+#include "hostcalls/fs/fd.h"
 
 struct s_box	cvms[MAX_CVMS];
 int send_req, receive_resp;
@@ -83,6 +84,8 @@ int monitor_init() {
 		return 1;
 	}
 	memset(cvms, 0, sizeof(cvms));
+  // init monitor fd table
+  init_realfd_table();
 	init_cap_files_store();
 	// init callback/hostcall trace file
 	init_hc_tracer();

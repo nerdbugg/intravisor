@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include <stdio.h>
 #include <netdb.h>
 #include <assert.h>
@@ -8,6 +9,7 @@
 #include "carrier_thread.h"
 #include "hostcall_tracer.h"
 #include "host_syscall_callbacs.h"
+#include "hostcalls/fs/fd.h"
 
 
 // static __inline__ void * getSP
@@ -491,10 +493,10 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 						a2);
 			break;
 		case 507:
-			ret =  write( (int) a0, (void *) a1, (size_t) a2);
+      ret = cvm_write(ct->sbox, (int)a0, (char*)comp_to_mon(a1, ct->sbox), (size_t)a2);
 			break;
 		case 508:
-			ret = read((int) a0, (void *)a1, (size_t) a2);
+      ret = cvm_read(ct->sbox, (int)a0, (char*)comp_to_mon(a1, ct->sbox), (size_t)a2);
 			break;
 		case 509:
 			ret = send((int) a0, 
@@ -510,7 +512,7 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 			ret = (int) close((int) a0);
 			break;
 		case 512:
-			ret = (int) socketpair((int) a0, (int) a1, (int) a2, a3);
+			ret = (int) socketpair((int) a0, (int) a1, (int) a2, (int*)a3);
 			break;
 #if 0
 #ifdef __linux__
