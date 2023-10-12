@@ -133,7 +133,11 @@ void load_elf(char* file_to_map, void *base_addr, encl_map_info* result) {
                 }
 
                 if(strcmp("host_exit", &strtab[ts->st_name]) == 0) {
-                result->host_exit = ts->st_value;
+                  result->host_exit = (void*)ts->st_value;
+                }
+
+                if(strcmp("exit", &strtab[ts->st_name]) == 0) {
+                  result->host_exit = (void*)ts->st_value;
                 }
 	        }
 
