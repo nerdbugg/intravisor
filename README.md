@@ -1,5 +1,8 @@
-# Intravisor  0.0.2
+# Intravisor  0.0.2 (TFORK enabled)
 
+This is a reaearch project based on [lsds/intravisor](https://github.com/lsds/intravisor), with fast checkpoint supporting.
+
+The code is based on 0.0.2 version.
 
 
 ## In the nutshell
