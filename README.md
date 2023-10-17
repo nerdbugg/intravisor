@@ -4,6 +4,9 @@ This is a reaearch project based on [lsds/intravisor](https://github.com/lsds/in
 
 The code is based on 0.0.2 version.
 
+TFORK enabled CheriBSD kernel: [gitlab](https://gitlab.com/nerdbug/cheribsd)
+New intravisor runtime libc: [gitlab](https://gitlab.com/nerdbug/newlib)
+
 
 ## In the nutshell
 
