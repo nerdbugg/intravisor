@@ -72,11 +72,10 @@ void load_elf(char *file_to_map, void *base_addr, encl_map_info *result) {
   Elf64_Phdr *pdr;
   int i, anywhere;
   void *entry_point = 0;
-  unsigned long load_segments_size;
+  unsigned long reserved_size;
   unsigned int mapflags = MAP_PRIVATE;
 
   // mapped = map_file(file_to_map, &sb);
-  // todo: only mmap first 4k of file?
   mapped = mmap_file(file_to_map, &sb);
 
   if (mapped < 0) {
@@ -163,7 +162,7 @@ void load_elf(char *file_to_map, void *base_addr, encl_map_info *result) {
 
     // Determine total in-memory size of all loadable sections:
     // Virtual address/Offset plus memory size of last loadable segment.
-    load_segments_size =
+    reserved_size =
         (unsigned long)((void *)pdr[i].p_vaddr - segment_base) + pdr[i].p_memsz;
   }
 
@@ -172,20 +171,21 @@ void load_elf(char *file_to_map, void *base_addr, encl_map_info *result) {
 
   entry_point = (void *)hdr->e_entry;
 
+  // note: static heap size, defined in config file
   unsigned long extra = EXTRA_PAYLOAD;
   result->extra_load = extra;
-  load_segments_size += extra;
+  reserved_size += extra;
 
   if (extra > 0)
     dlog("Extra payload: old 0x%lx, new 0x%lx\n",
-         ROUNDUP(load_segments_size - extra, 0x1000), load_segments_size);
+         ROUNDUP(reserved_size - extra, 0x1000), reserved_size);
 
   // note: reserve the memory region for loading
-  size_t total_length = ROUNDUP(load_segments_size, 0x1000);
-  void *full =
+  size_t total_length = ROUNDUP(reserved_size, 0x1000);
+  void *reserved =
       mmap((void *)base_addr, total_length, PROT_READ | PROT_WRITE | PROT_EXEC,
            MAP_PRIVATE | MAP_ANON | MAP_FIXED, -1, 0);
-  if (full == MAP_FAILED) {
+  if (reserved == MAP_FAILED) {
     printf("can not allocate 0x%lx in %p, die\n", total_length, base_addr);
     perror("mmap");
     while (1)
@@ -194,7 +194,7 @@ void load_elf(char *file_to_map, void *base_addr, encl_map_info *result) {
 
   // note: fill extra memory segment?
 
-  // note: load segments of elf file
+  // note: load segments of elf file, iterate all program header
   // assme the file is PIC
   for (i = 0; i < hdr->e_phnum; ++i, ++pdr) {
     unsigned int protflags = PROT_EXEC;
@@ -206,13 +206,13 @@ void load_elf(char *file_to_map, void *base_addr, encl_map_info *result) {
       continue;
 
     if ((pdr->p_flags & PF_W) && (result->end_of_ro == 0)) {
-      log("end of RO: %p\n", pdr->p_vaddr + full);
+      log("end of RO: %p\n", pdr->p_vaddr + reserved);
       result->end_of_ro = pdr->p_vaddr;
     }
 
     // note: assume the initial p_vaddr is 0 (PIC)
     unsigned long unaligned_map_addr =
-        (unsigned long)full + (unsigned long)pdr->p_vaddr;
+        (unsigned long)reserved + (unsigned long)pdr->p_vaddr;
     map_addr = ALIGNDOWN(unaligned_map_addr, 0x1000);
     mapflags |= MAP_FIXED;
     map_len = ROUNDUP(pdr->p_vaddr + pdr->p_memsz, 0x1000) -
@@ -234,7 +234,7 @@ void load_elf(char *file_to_map, void *base_addr, encl_map_info *result) {
 #endif
     //	else
     //	    segment = mmap((void *)map_addr, map_len, protflags|PROT_EXEC,
-    //mapflags , fd, offset);
+    // mapflags , fd, offset);
 
     if (segment == MAP_FAILED) {
       result->base = (void *)-1;
@@ -242,37 +242,23 @@ void load_elf(char *file_to_map, void *base_addr, encl_map_info *result) {
               (void *)pdr->p_vaddr, file_to_map, strerror(errno));
       while (1)
         ;
-    } else {
-      dlog("Mapped %p, segment = %p, map_aaadr = %p, map_len = %lx\n",
-           (void *)pdr->p_vaddr, segment, map_addr, map_len);
     }
+    dlog("Mapped %p, segment = %p, map_addr = %p, map_len = 0x%lx, "
+         "offset = 0x%lx\n",
+         (void *)pdr->p_vaddr, segment, (void *)map_addr, map_len, offset);
 
-    // note: memset pdr->p_filesz - pdr->p_memsz
-    if (pdr->p_memsz > pdr->p_filesz) {
-      size_t brk = (size_t)segment + pdr->p_filesz;
-      size_t pgbrk = ROUNDUP(brk, 0x1000);
-
-      memset((void *)brk, 0, pgbrk - brk);
-
-      size_t len2 = (size_t)segment + map_len - pgbrk;
-      void *mmap_ret1 = mmap((void *)pgbrk, len2, protflags | PROT_EXEC,
-                             MAP_ANON | MAP_PRIVATE | MAP_FIXED, -1, 0);
-
-      if ((pgbrk - (size_t)segment) < map_len && (mmap_ret1 == MAP_FAILED)) {
-        result->base = (void *)-1;
-        fprintf(stderr, "Could not map segment 1 (%p) of %s: %s\n",
-                (void *)pdr->p_vaddr, file_to_map, strerror(errno));
-        while (1)
-          ;
-      } else
-        printf("SHARED MAPPING %p--%p\n", mmap_ret1, mmap_ret1 + len2);
-    }
+    // note: memset pdr->p_filesz - pdr->p_memsz,
+    // p_vaddr is 0-started, add reserved as base
+    void *brk = reserved + (unsigned long)pdr->p_vaddr + pdr->p_filesz;
+    dlog("memset(%p, 0, 0x%lx)", (void *)brk,
+         (unsigned long)(pdr->p_memsz - pdr->p_filesz));
+    memset((void *)brk, 0, pdr->p_memsz - pdr->p_filesz);
   }
 
   close(fd);
 
-  result->base = full;
-  result->size = load_segments_size;
+  result->base = reserved;
+  result->size = reserved_size;
   result->entry_point = entry_point;
 
 done:
