@@ -10,6 +10,7 @@
 #include "hostcall_tracer.h"
 #include "host_syscall_callbacs.h"
 #include "hostcalls/fs/fd.h"
+#include "host_num.h"
 
 
 // static __inline__ void * getSP
@@ -231,7 +232,8 @@ long hostcall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, lon
 //	struct lkl_disk *disk;
 	switch(t5) {
 		case 1:
-			wrap_write(ct->sbox->fd, (void *)comp_to_mon(a0, ct->sbox), a1);
+			// wrap_write(ct->sbox->fd, (void *)comp_to_mon(a0, ct->sbox), a1);
+      fprintf(stdout, (void *)comp_to_mon(a0, ct->sbox), a1, a2, a3);
 //			wrap_write(ct->sbox->fd, a0, a1);
 			break;
 #ifdef LKL
@@ -598,8 +600,8 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 		case 802:
 			ret = unlink((char*)comp_to_mon(a0, ct->sbox));
 			break;
-		case 803:
-			ret = close(a0);
+		case CLOSE:
+      ret = cvm_close(ct->sbox, (int)a0);
 			break;
 		case 804:
 			ret = access((char*)comp_to_mon(a0, ct->sbox), a1);
@@ -607,21 +609,21 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 		case 808:
 			ret = truncate((char*)comp_to_mon(a0, ct->sbox), a1);
 			break;
-		case 809:
+		case READ:
 //			printf("read = %d, %p, %d\n", a0, comp_to_mon(a1, ct->sbox), a2);
-			ret = read(a0, (void*)comp_to_mon(a1, ct->sbox), a2);
+      ret = cvm_read(ct->sbox, (int)a0, (char*)comp_to_mon(a1, ct->sbox), (size_t)a2);
 //			printf("read ret = %d\n", ret);
 			break;
-		case 810:
-			ret = write(a0, (void*)comp_to_mon(a1, ct->sbox), a2);
+		case WRITE:
+      ret = cvm_write(ct->sbox, (int)a0, (char*)comp_to_mon(a1, ct->sbox), (size_t)a2);
 			break;
-		case 811:
+		case OPEN:
 //			ret = open(comp_to_mon(a0, ct->sbox), a1, a2);
-			ret = open((char*)comp_to_mon(a0, ct->sbox), O_RDWR | O_CREAT, 0666);
+      ret = cvm_open(ct->sbox, (char*)comp_to_mon(a0, ct->sbox), (int)a1, 0666);
 			break;
-		case 812:
+		case LSEEK:
 //			printf("lseek set %d %d %d\n", a0, a1, a2);
-			ret = lseek(a0, a1, a2);
+      ret = cvm_lseek(ct->sbox, a0, a1, a2);
 //			printf("lseek ret = %d\n", ret);
 			break;
 
