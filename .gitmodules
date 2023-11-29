@@ -1,0 +1,3 @@
+[submodule "runtime/native/mnist/libonnx"]
+	path = runtime/native/mnist/libonnx
+	url = https://github.com/Chuyukang/libonnx
