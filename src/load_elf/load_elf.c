@@ -228,8 +228,12 @@ void load_elf(char *file_to_map, void *base_addr, encl_map_info *result) {
 #if 0
 	    segment = mmap((void *)map_addr, map_len, protflags | PROT_WRITE | PROT_EXEC, MAP_SHARED | MAP_FIXED , sfd, offset);
 #else
+
+    // segment =
+    //     mmap((void *)map_addr, map_len, protflags | PROT_WRITE | PROT_EXEC,
+    //          MAP_PRIVATE | MAP_FIXED, fd, offset);
     segment =
-        mmap((void *)map_addr, map_len, protflags | PROT_WRITE | PROT_EXEC,
+        mmap((void *)map_addr, map_len, protflags | PROT_EXEC,
              MAP_PRIVATE | MAP_FIXED, fd, offset);
 #endif
     //	else
