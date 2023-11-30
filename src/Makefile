@@ -9,7 +9,7 @@ SRC_YAML := libyaml/src/api.c libyaml/src/dumper.c libyaml/src/emitter.c libyaml
 SRC_LOADER := load_elf/load_elf.c
 SRC_COMMON := common/utils.c
 SRC_TFORK := tfork/tfork.c
-SRC_CVM := cvm/derived.c cvm/template.c cvm/common.c cvm/restore.c
+SRC_CVM := cvm/init.c cvm/restore.c cvm/template.c
 SRC_DAEMON := daemon.c
 SRC_HOSTCALL := hostcalls/hostcalls.c hostcalls/carrie_thread.c hostcalls/host_cap_calls.c hostcalls/host_cap_files.c \
 		hostcalls/host_syscall_callbacs.c hostcalls/hostcall_tracer.c hostcalls/host_sc.c \

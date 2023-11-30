@@ -69,3 +69,25 @@ void restore_cvm_region(struct s_box *cvm, struct s_box *t_cvm) {
   dlog("tfork complete\n");
 #endif
 }
+
+// When init template cvm, we must make sure stack memory is accessable by using mmap.
+int init_pthread_stack(struct s_box *cvm)
+{
+    struct c_thread *ct = &cvm->threads[0];
+    void* ret = mmap(ct->stack, ct->stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_FIXED | MAP_ANONYMOUS, -1, 0);
+    if (ret == MAP_FAILED) {
+        perror("mmap");
+        return 1;
+    }
+    else {
+        dlog("[cVM STACKs] = [%p -- %lx]\n", ct->stack, (unsigned long)ct->stack + ct->stack_size);
+    }
+
+    /* Remove temporarily.The anonymous region is zero-filled*/
+    // memset(ct->stack, 0, ct->stack_size);
+
+    place_canaries(ct->stack, ct->stack_size, 0xabbacaca);
+    check_canaries(ct->stack, ct->stack_size, 0xabbacaca);
+    return 0;
+}
+
