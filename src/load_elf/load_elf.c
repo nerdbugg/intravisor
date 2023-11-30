@@ -49,7 +49,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "cvm/log.h"
+#include "common/log.h"
 #include "load_elf.h"
 
 #define ROUNDUP(x, y) ((((x) + ((y)-1)) / (y)) * (y))

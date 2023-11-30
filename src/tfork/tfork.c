@@ -12,7 +12,7 @@
 
 #include "monitor.h"
 #include "tfork.h"
-#include "cvm/log.h"
+#include "common/log.h"
 #include "daemon.h"
 #include "hostcalls/carrier_thread.h"
 
@@ -325,7 +325,7 @@ long load_sub_thread(struct c_thread *ct, struct c_thread *t_ct)
     return (long)ct->tid;
 }
 
-void load_all_thread(int cid)
+void restore_from_template(int cid)
 {
     struct s_box *cvm = &cvms[cid];
     struct c_thread *me = cvm->threads;

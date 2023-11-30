@@ -1,19 +1,17 @@
 #include <assert.h>
 
 #include "monitor.h"
-#include "cvm/log.h"
-#include "tfork.h"
-#include "utils.h"
+#include "common/log.h"
+#include "common/utils.h"
+#include "restore.h"
 #include "hostcalls/fs/fd.h"
 
-extern void *init_thread(int cid);
+extern void *run_cvm(int cid);
 extern int init_pthread_stack(struct s_box *cvm);
-extern int build_cvm(int cid, struct cvm *f, int argc, char *argv[]);
+extern int init_cvm(int cid, struct cvm *f, int argc, char *argv[]);
 extern int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[]);
 
-extern unsigned long TFORK_FAILED;
-
-int deploy_cvm(struct cvm *f)
+int build_cvm(struct cvm *f)
 {
     int cid = f->isol.base / 0x10000000;
 
@@ -40,15 +38,12 @@ int deploy_cvm(struct cvm *f)
     if ( !cvms[cid].use_tfork )
     {
         // todo: sanitise base addresses, check cvms/sbox max number
-        build_cvm(cid, // so far it is the best I can offer.
-                  f,
-                  c_argc,
-                  c_argv
-                );
+        // so far it is the best I can offer.
+        init_cvm(cid, f, c_argc, (char**)c_argv);
     }
     else
     {
-        fork_cvm(cid, t_cid, &comp, c_argc, c_argv);
+        fork_cvm(cid, t_cid, &comp, c_argc, (char**)c_argv);
     }
     // assert(cvms[cid].threads[0].sbox != 0);
     return cid;
@@ -59,19 +54,19 @@ int cvm_worker(struct cvm *f)
     dlog("***************** [%d] Deploy '%s' ***************\n", f->isol.base/CVM_MAX_SIZE, f->name);
     dlog("BUILDING cvm: name=%s, disk=%s, runtime=%s, net=%s, args='%s', base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, cb_in = '%s', cb_out = '%s' wait = %ds\n", f->name, f->disk, f->runtime, f->net, f->args, f->isol.base, f->isol.size, f->isol.begin, f->isol.end, f->cb_in, f->cb_out, f->wait);
 
-    int cid = deploy_cvm(f);
+    int cid = build_cvm(f);
     dlog("BUILDING cvm complete: cid=%d, disk=%s, runtime=%s, base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, syscall_handler = '%ld', ret_from_mon = '%ld'\n", cid, cvms[cid].disk_image, cvms[cid].libos, cvms[cid].base, cvms[cid].box_size, cvms[cid].cmp_begin, cvms[cid].cmp_end, cvms[cid].syscall_handler, cvms[cid].ret_from_mon);
 
     struct s_box *cvm = &cvms[cid];
     if (!cvm->use_tfork)
     {
         // is template
-        init_thread(cid);
+        run_cvm(cid);
     }
     else
     {
         dlog("load template, cid=%d, t_cid=%d\n", cid, cvm->t_cid);
-        load_all_thread(cid);
+        restore_from_template(cid);
     }
 }
 
@@ -129,79 +124,13 @@ void create_and_start_cvm(struct cvm *f)
     // init cvm fdtable
     fdtable_init(&(cvm->fdtable));
 
-    if (cvm->use_tfork == false)
-    {
+    if (cvm->use_tfork == false) {
         init_pthread_stack(cvm);
     }
-    else
-    {
-#ifndef TFORK
-	    dlog("prepare restore memory layout using template snapshot\n");
-	    map_entry* map_entry_list = cvm_map_entry_list[t_cid];
-	    assert(map_entry_list!=NULL);
-	    int fd = cvm_snapshot_fd[t_cid];
-	    assert(fd>0);
-
-        map_entry *last = NULL;
-        size_t map_size = 0;
-        unsigned long map_start = NULL;
-	    unsigned long file_offset = 0l;
-	    map_entry* p = map_entry_list;
-	    while(p) {
-                unsigned long old_begin	= cvms[t_cid].cmp_begin;
-                unsigned long new_begin = cvm->cmp_begin;
-                size_t size = p->end - p->start;
-                unsigned long start = p->start - old_begin + new_begin;
-
-                if(last==NULL || p->start==last->end) {
-                    if(map_start == NULL) {
-                        map_start = start;
-                    }
-                    map_size += size;
-                } else {
-                    // note: first mmap RWX, then using mprotect to restore p->prot
-                    void* res = mmap(map_start, map_size, PROT_READ|PROT_WRITE|PROT_EXEC,
-                                    MAP_PRIVATE, fd, file_offset);
-                    assert(res!=MAP_FAILED);
-                    file_offset += map_size;
-
-                    map_size = size;
-                    map_start = start;
-                }
-                last = p;
-                p = p->next;
-	    }
-            // note: the last iterattion
-            if (last!=NULL) {
-                    void* res = mmap(map_start, map_size, PROT_READ|PROT_WRITE|PROT_EXEC,
-                                    MAP_PRIVATE, fd, file_offset);
-                    assert(res!=MAP_FAILED);
-            }
-
-            // note: using mprotect to restore permissions
-            p = map_entry_list;
-            while(p) {
-                unsigned long old_begin	= cvms[t_cid].cmp_begin;
-                unsigned long new_begin = cvm->cmp_begin;
-                size_t size = p->end - p->start;
-                unsigned long start = p->start - old_begin + new_begin;
-
-                int ret = mprotect(start, size, p->prot);
-                assert(ret!=-1);
-
-                p = p->next;
-            }
-	    dlog("complete snapshot restoration\n");
-#else
-            dlog("prepare to invoke tfork syscall, src_addr=%p, dst_addr=%p, len=%d\n", cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size);
-            if (tfork(cvms[t_cid].cmp_begin, cvm->cmp_begin, cvm->box_size) == TFORK_FAILED) {
-                    printf("tfork FAILED\n");
-                    exit(1);
-            }
-            dlog("tfork complete\n");
-#endif
-
+    else {
+        restore_cvm_region(cvm, &(cvms[t_cid]));
     }
+    
 
     // TODO: maybe stack conflicts when exec load template.
     if (cvm -> use_tfork)

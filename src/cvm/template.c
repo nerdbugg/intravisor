@@ -1,8 +1,8 @@
 #include <sys/thr.h>
 
 #include "monitor.h"
-#include "cvm/log.h"
-#include "utils.h"
+#include "common/log.h"
+#include "common/utils.h"
 #include "hostcalls/host_syscall_callbacs.h"
 
 struct cinv_s
@@ -34,7 +34,7 @@ int init_pthread_stack(struct s_box *cvm)
     return 0;
 }
 
-int build_cvm(int cid, struct cvm *f, 
+int init_cvm(int cid, struct cvm *f, 
 // struct cmp_s *comp, char *libos, char *disk, 
 int argc, char *argv[] 
 // , char *cb_out, char *cb_in
@@ -220,7 +220,7 @@ int gen_caps(struct s_box *cvm, struct c_thread *ct)
     // assert(ct->sbox == cvm);
 }
 
-void *init_thread(int cid)
+void *run_cvm(int cid)
 {
     struct c_thread *me = &cvms[cid].threads[0];
     thr_self(&me->task_id);

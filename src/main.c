@@ -4,9 +4,9 @@
 
 #include "monitor.h"
 #include "tfork.h"
-#include "utils.h"
+#include "common/utils.h"
 #include "cvm/init.h"
-#include "cvm/log.h"
+#include "common/log.h"
 #include "hostcalls/host_syscall_callbacs.h"
 #include "hostcalls/hostcall_tracer.h"
 #include "hostcalls/fs/fd.h"

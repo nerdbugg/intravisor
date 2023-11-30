@@ -1,5 +1,5 @@
 #include "monitor.h"
-#include "utils.h"
+#include "common/utils.h"
 
 #define MAX_STREAM_CAPS	10
 struct stream_caps_store {

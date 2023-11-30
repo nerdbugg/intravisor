@@ -24,7 +24,7 @@ extern struct cvm_tmplt_ctx cvm_ctx[MAX_CVMS];
 extern map_entry* cvm_map_entry_list[MAX_CVMS];
 extern int cvm_snapshot_fd[MAX_CVMS];
 
-void load_all_thread(int cid);
+void restore_from_template(int cid);
 void notify_other_thread_save(struct c_thread *cur_thread);
 void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread);
 

@@ -11,7 +11,7 @@
 #include <cheri/cheri.h>
 #include <cheri/cheric.h>
 
-#include "cvm/log.h"
+#include "common/log.h"
 #include "monitor.h"
 #include "daemon.h"
 
