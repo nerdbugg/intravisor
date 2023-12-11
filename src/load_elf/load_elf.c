@@ -206,7 +206,7 @@ void load_elf(char *file_to_map, void *base_addr, encl_map_info *result) {
       continue;
 
     if ((pdr->p_flags & PF_W) && (result->end_of_ro == 0)) {
-      log("end of RO: %p\n", pdr->p_vaddr + reserved);
+      dlog("end of RO: %p\n", pdr->p_vaddr + reserved);
       result->end_of_ro = pdr->p_vaddr;
     }
 

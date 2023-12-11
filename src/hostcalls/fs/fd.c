@@ -6,8 +6,9 @@
 #include <string.h>
 #include <sys/types.h>
 
-#include "hostcalls/fs/fd.h"
 #include "monitor.h"
+#include "common/log.h"
+#include "hostcalls/fs/fd.h"
 
 shared_fd realfd_table[FDTABLE_MAX_FILES * 10];
 
@@ -93,7 +94,7 @@ int cvm_open(s_box *cvm, char *path, int flags, mode_t mode) {
   }
 
   shared_fd *rfd = vfscore_sharedfd_init(sysfd);
-  printf("[intravisor/fs] rfd = &realfd_table[%lu]\n", rfd - realfd_table);
+  dlog("[intravisor/fs] rfd = &realfd_table[%lu]\n", rfd - realfd_table);
   if (rfd == NULL) {
     return -ENOMEM;
   }
@@ -114,7 +115,7 @@ int cvm_open(s_box *cvm, char *path, int flags, mode_t mode) {
   }
   vfscore_file_init(&(ft->files[fd]), rfd, ukflags);
 
-  printf("[intravisor/fs] cvm_open(%p, %s, %d, %04o), sysfd = %d, fd = %d\n",
+  dlog("[intravisor/fs] cvm_open(%p, %s, %d, %04o), sysfd = %d, fd = %d\n",
          cvm, path, flags, mode, sysfd, fd);
 
   return fd;
@@ -122,7 +123,7 @@ int cvm_open(s_box *cvm, char *path, int flags, mode_t mode) {
 
 // buf should be global address
 int cvm_write(s_box *cvm, int fd, const char *buf, size_t len) {
-  // printf("[intravisor/fs] called cvm_write\n");
+  // dlog("[intravisor/fs] called cvm_write\n");
 
   if (fd > FDTABLE_MAX_FILES)
     return -EBADF;
@@ -130,12 +131,12 @@ int cvm_write(s_box *cvm, int fd, const char *buf, size_t len) {
   fdtable *ft = &(cvm->fdtable);
   vfscore_file *file = &(ft->files[fd]);
 
-  // printf("[intravisor/fs] %s: file->f_flags = %d\n", __func__,
+  // dlog("[intravisor/fs] %s: file->f_flags = %d\n", __func__,
   // file->f_flags);
 
   // check read write feasibility
   if ((file->f_flags & UK_FWRITE) == 0) {
-    // printf("[intravisor/fs] %s: write failed\n", __func__);
+    // dlog("[intravisor/fs] %s: write failed\n", __func__);
     return -EBADF;
   }
 
@@ -149,7 +150,7 @@ int cvm_write(s_box *cvm, int fd, const char *buf, size_t len) {
 
   // NOTE: the return value does not contain errno?
   int res = write(sysfd, buf, len);
-  // printf("[intravisor/fs] write syscall returned %d, errno is %d\n", res,
+  // dlog("[intravisor/fs] write syscall returned %d, errno is %d\n", res,
   // errno);
   if(res>0) {
     file->f_offset += res;
@@ -164,7 +165,7 @@ int cvm_write(s_box *cvm, int fd, const char *buf, size_t len) {
 
 int cvm_read(s_box *cvm, int fd, char *buf, size_t len) {
   if (fd > FDTABLE_MAX_FILES) {
-    printf("[intravisor/fs] fd>FDTABLE_MAX_FILES\n");
+    dlog("[intravisor/fs] fd>FDTABLE_MAX_FILES\n");
     return -EBADF;
   }
 
@@ -172,7 +173,7 @@ int cvm_read(s_box *cvm, int fd, char *buf, size_t len) {
   vfscore_file *file = &(ft->files[fd]);
 
   if ((file->f_flags & UK_FREAD) == 0) {
-    printf("[intravisor/fs] (file->f_flags & UK_FREAD) == 0\n");
+    dlog("[intravisor/fs] (file->f_flags & UK_FREAD) == 0\n");
     return -EBADF;
   }
 
@@ -229,7 +230,7 @@ int cvm_close(s_box *cvm, int fd) {
   }
 
   if (fd > FDTABLE_MAX_FILES) {
-    printf("[intravisor/fs] fd>FDTABLE_MAX_FILES\n");
+    dlog("[intravisor/fs] fd>FDTABLE_MAX_FILES\n");
     return -EBADF;
   }
 
@@ -241,10 +242,10 @@ int cvm_close(s_box *cvm, int fd) {
   shared_fd *sharedfd = file->sharedfd;
   sharedfd->ref_count -= 1;
   if (sharedfd->ref_count == 0) { // free the shared_fd
-    printf("[intravisor/fs] shared_fd %p will be freed\n", sharedfd);
+    dlog("[intravisor/fs] shared_fd %p will be freed\n", sharedfd);
 
     int sysfd = file->sharedfd->sysfd;
-    printf("[intravisor/fs] close(%d), sysfd = %d\n", fd, sysfd);
+    dlog("[intravisor/fs] close(%d), sysfd = %d\n", fd, sysfd);
     close(sysfd);
   }
 
