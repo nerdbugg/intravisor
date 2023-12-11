@@ -32,7 +32,9 @@ cinv:
 #else
 		// a0 = local_cap_store //-> 0x2e001000
 		// a1 = struct cinv_s {void *__capability caps[10];} cinv_args;
+    // a2 = sp
 		mv	t0, a0
+    mv  t1, a2
 		lc	ca2, (16*2)(a1)
 		sc	ca2, COMP_DDC(t0)	//compartment ddc
 
@@ -72,6 +74,7 @@ cinv:
 
 		lc	ca1, (16*1)(a1)
 
+    mv sp, t1
 		cspecialw	ddc, ca2
 		CInvoke ca0, ca1
 #endif
