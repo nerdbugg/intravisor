@@ -12,7 +12,7 @@ typedef struct snapshot_req
 {
     struct snapshot_thr
     {
-        int pthread_id;
+        pthread_t pthread_id;
         int task_id;
         void* ct;
     } sub_threads[MAX_THREADS];

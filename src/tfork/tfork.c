@@ -12,8 +12,9 @@
 
 #include "monitor.h"
 #include "tfork.h"
-#include "common/log.h"
 #include "daemon.h"
+#include "common/log.h"
+#include "common/profiler.h"
 #include "hostcalls/carrier_thread.h"
 
 #define SIGSAVE SIGUSR1
@@ -29,6 +30,9 @@ const static int tfork_syscall_num = 577;
 
 map_entry *cvm_map_entry_list[MAX_CVMS];
 int cvm_snapshot_fd[MAX_CVMS];
+
+
+typedef void* __capability cap;
 
 int tfork(void *src_addr, void *dst_addr, int len)
 {
@@ -147,17 +151,19 @@ void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
     // printf("save status = %d\n", status);
     // __asm__ __volatile__("sd sp, %0" :"=m" (cur_sp) :: "memory");
 
-    dlog("sp is %p; ra is %p;\n", cur_sp, cur_ra);
+    log("s0 is %p, sp is %p, ra is %p,\n", cur_s0, cur_sp, cur_ra);
 
     // cur_thread->ctx.s0 = cur_sp;
     // cur_thread->ctx.ra = cur_ra;
     cur_thread->ctx.s0 = cur_s0;
 
+    profiler_end(&(profilers[SNAPSHOT_GEN]));
+
     destroy_carrie_thread(cur_thread->sbox->threads);
 }
 
 // note: restore main thread of cvm (from half of tp_write function)
-void gen_caps_restored(struct c_thread *target_thread)
+void restore_main_thread(struct c_thread *target_thread)
 {
     target_thread->m_tp = getTP();
     target_thread->c_tp = (void *)(target_thread->stack + 4096);
@@ -167,8 +173,7 @@ void gen_caps_restored(struct c_thread *target_thread)
     struct s_box *t_cvm = &cvms[cvm->t_cid];
 
     void *ret_comp_pc = (void*)cvm->ret_from_mon;
-    printf("thread[tid=%x], ret_from_mon's address is 0x%x\n", target_thread->tid, ret_comp_pc);
-    void *__capability ret_comp_pcc = codecap_create(cvm->cmp_begin, cvm->cmp_end);
+    void *__capability ret_comp_pcc = codecap_create((void*)cvm->cmp_begin, (void*)cvm->cmp_end);
     ret_comp_pcc = cheri_setaddress(ret_comp_pcc, comp_to_mon((unsigned long long)ret_comp_pc, cvm));
 
     void *__capability ret_comp_dcap = datacap_create((void *)cvm->cmp_begin, (void *)cvm->cmp_end);
@@ -183,22 +188,33 @@ void gen_caps_restored(struct c_thread *target_thread)
     }
 
     // note: write caps to local_cap_store region
-    void *__capability *local_cap_store = comp_to_mon(0xe001000, cvm);
-    void *__capability *comp_ddc = ((uint64_t)local_cap_store) + 2 * sealcap_size;
-    void *__capability *sealed_pcc = ((uint64_t)local_cap_store) + 11 * sealcap_size;
-    void *__capability *sealed_ddc = ((uint64_t)local_cap_store) + 12 * sealcap_size;
-    *sealed_pcc = cheri_seal(ret_comp_pcc, sealcap);
-    *sealed_ddc = cheri_seal(ret_comp_dcap, sealcap);
-    *comp_ddc = datacap_create((void *)cvm->cmp_begin, (void *)cvm->cmp_end);
+    // void *__capability *local_cap_store = comp_to_mon(0xe001000, cvm);
+    // void *__capability *comp_ddc = ((uint64_t)local_cap_store) + 2 * sealcap_size;
+    // void *__capability *sealed_pcc = ((uint64_t)local_cap_store) + 11 * sealcap_size;
+    // void *__capability *sealed_ddc = ((uint64_t)local_cap_store) + 12 * sealcap_size;
+    // *sealed_pcc = cheri_seal(ret_comp_pcc, sealcap);
+    // *sealed_ddc = cheri_seal(ret_comp_dcap, sealcap);
+    // *comp_ddc = datacap_create((void *)cvm->cmp_begin, (void *)cvm->cmp_end);
+ 
+    void *local_cap_store = (void*)comp_to_mon(0xe001000, cvm);
+    void *comp_ddc = (void*)((uint64_t)local_cap_store) + 2 * sealcap_size;
+    void *sealed_pcc = (void*)((uint64_t)local_cap_store) + 11 * sealcap_size;
+    void *sealed_ddc = (void*)((uint64_t)local_cap_store) + 12 * sealcap_size;
+    st_cap(sealed_pcc, cheri_seal(ret_comp_pcc, sealcap));
+    st_cap(sealed_ddc, cheri_seal(ret_comp_dcap, sealcap));
+    st_cap(comp_ddc, datacap_create((void *)cvm->cmp_begin, (void *)cvm->cmp_end));
 
     dlog("gen_caps_restored: sealed_pcc \n");
-    CHERI_CAP_PRINT(*sealed_pcc);
+    CHERI_CAP_PRINT(*(cap*)sealed_pcc);
     dlog("gen_caps_restored: sealed_ddc \n");
-    CHERI_CAP_PRINT(*sealed_ddc);
+    CHERI_CAP_PRINT(*(cap*)sealed_ddc);
     dlog("gen_caps_restored: comp_ddc \n");
-    CHERI_CAP_PRINT(*comp_ddc);
+    CHERI_CAP_PRINT(*(cap*)comp_ddc);
 
-    // todo: get a reliable source of prev sp register
+    profiler_end(&(profilers[SANDBOX_RESUME]));
+    profiler_begin(&(profilers[WORKLOAD_RESUME]));
+
+    // TODO: get a reliable source of prev sp register
     void *prev_s0 = (void *)(*(uint64_t *)(ctx->s0 - 16) + 112);
     // note: initialize the sp
     void *sp = (void*)mon_to_comp((unsigned long)prev_s0, t_cvm);
@@ -211,7 +227,7 @@ void gen_caps_restored(struct c_thread *target_thread)
         "lc ct2, %3;"
         "cspecialw ddc, ct2;"
         "CInvoke ct0, ct1;" ::"m"(sp),
-        "m"(*sealed_pcc), "m"(*sealed_ddc), "m"(*comp_ddc));
+        "m"(*(cap*)sealed_pcc), "m"(*(cap*)sealed_ddc), "m"(*(cap*)comp_ddc));
 }
 
 // note: start a new thread from template ucontext
@@ -353,7 +369,7 @@ void restore_from_template(int cid)
 
     // note: the main thread(who called host_save) will restored in below path
     // note: restore main thread of cvm
-    gen_caps_restored(me);
+    restore_main_thread(me);
 }
 
 // note: cur hostcall use, request daemon for threads state
@@ -373,15 +389,15 @@ void notify_other_thread_save(struct c_thread *cur_thread)
     assert(cur_thread == threads);
 
     memset(&req, 0, sizeof(req));
-    req.main_thread_id = threads[0].task_id;
-    req.host_exit_addr = cur_thread->sbox->base + cur_thread->sbox->host_exit_addr;
-    dlog("monitor: main_thread_id=%d\n", req.main_thread_id);
+    req.main_thread_id = (pthread_t)threads[0].task_id;
+    req.host_exit_addr = (unsigned long)cur_thread->sbox->base + cur_thread->sbox->host_exit_addr;
+    dlog("monitor: main_thread_id=%lu\n", (unsigned long)req.main_thread_id);
     for (i = 1; i < 62; ++i) {
         if (threads[i].task_id == NULL)
         {
             break;
         }
-        dlog("monitor: threads[%d].tid=%d\n", i, threads[i].task_id);
+        dlog("monitor: threads[%d].tid=%ld\n", i, threads[i].task_id);
         req.sub_threads[i - 1].task_id = threads[i].task_id;
         req.sub_threads[i - 1].pthread_id = threads[i].tid;
         req.sub_threads[i - 1].ct = &(threads[i]);
