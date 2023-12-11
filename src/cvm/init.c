@@ -1,9 +1,12 @@
+#include <stdint.h>
+#include <stdio.h>
 #include <sys/thr.h>
 #include <assert.h>
 
 #include "monitor.h"
 #include "common/log.h"
 #include "common/utils.h"
+#include "common/profiler.h"
 #include "hostcalls/fs/fd.h"
 #include "restore.h"
 #include "template.h"
@@ -18,7 +21,7 @@ int cvm_worker(struct cvm *f);
 extern int init_pthread_stack(struct s_box *cvm);
 extern int init_cvm(int cid, struct cvm *f, int argc, char *argv[]);
 int gen_caps(struct s_box *cvm, struct c_thread *ct);
-void cinv(void* local_cap_store, struct cinv_s* args);
+void cinv(void* local_cap_store, struct cinv_s* args, void* sp);
 
 void create_and_start_cvm(struct cvm *f)
 {
@@ -53,12 +56,18 @@ void create_and_start_cvm(struct cvm *f)
 
     int t_cid = find_template(cid, f->runtime);
     cvm->t_cid = t_cid;
+
     cvm->fork = f->fork;
-    cvm->use_tfork = (cvm->t_cid > 0) && cvm->fork;
+
+    cvm->is_template = f->template;
+
+    cvm->resume = f->resume;
+    cvm->resume = (cvm->t_cid>0) && cvm->resume;
+
     // init cvm fdtable
     fdtable_init(&(cvm->fdtable));
 
-    if (cvm->use_tfork == false) {
+    if (cvm->resume == false) {
         init_pthread_stack(cvm);
     }
     else {
@@ -67,7 +76,7 @@ void create_and_start_cvm(struct cvm *f)
     
 
     // TODO: maybe stack conflicts when exec load template.
-    if (cvm -> use_tfork)
+    if (cvm -> resume)
     {
         ret = pthread_attr_setstack(&ct->tattr, ct->stack, ct->stack_size);
     }
@@ -97,7 +106,7 @@ void create_and_start_cvm(struct cvm *f)
 
     if (f->wait == -1)
     {
-        dlog("pthread join, tid=%p, isol.base=%p\n", ct->tid, f->isol.base);
+        dlog("pthread join, tid=%p, isol.base=%p\n", ct->tid, (void*)f->isol.base);
 
         void *cret;
         for (int i=0; true; i++) {
@@ -129,17 +138,19 @@ int build_cvm(struct cvm *f)
     char *p2 = strtok(f->args, " ");
     while (p2 && c_argc < kMaxArgs - 1)
     {
-        c_argv[c_argc++] = p2;
+        c_argv[c_argc++] = (long)p2;
         p2 = strtok(0, " ");
     }
     c_argv[c_argc] = 0;
+
     struct cmp_s comp;
-    comp.base = f->isol.base;   /* base addr */
+    comp.base = (void*)f->isol.base;   /* base addr */
     comp.size = f->isol.size;   /* size */
     comp.begin = f->isol.begin; /* cmp_begin */
     comp.end = f->isol.end;     /* cmp_end  */
+
     int t_cid = cvms[cid].t_cid;
-    if ( !cvms[cid].use_tfork )
+    if ( cvms[cid].resume == false )
     {
         // todo: sanitise base addresses, check cvms/sbox max number
         // so far it is the best I can offer.
@@ -155,14 +166,14 @@ int build_cvm(struct cvm *f)
 
 int cvm_worker(struct cvm *f)
 {
-    dlog("***************** [%d] Deploy '%s' ***************\n", f->isol.base/CVM_MAX_SIZE, f->name);
+    dlog("***************** [%ld] Deploy '%s' ***************\n", f->isol.base/CVM_MAX_SIZE, f->name);
     dlog("BUILDING cvm: name=%s, disk=%s, runtime=%s, net=%s, args='%s', base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, cb_in = '%s', cb_out = '%s' wait = %ds\n", f->name, f->disk, f->runtime, f->net, f->args, f->isol.base, f->isol.size, f->isol.begin, f->isol.end, f->cb_in, f->cb_out, f->wait);
 
     int cid = build_cvm(f);
     dlog("BUILDING cvm complete: cid=%d, disk=%s, runtime=%s, base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, syscall_handler = '%ld', ret_from_mon = '%ld'\n", cid, cvms[cid].disk_image, cvms[cid].libos, cvms[cid].base, cvms[cid].box_size, cvms[cid].cmp_begin, cvms[cid].cmp_end, cvms[cid].syscall_handler, cvms[cid].ret_from_mon);
 
     struct s_box *cvm = &cvms[cid];
-    if (!cvm->use_tfork)
+    if (cvm->resume == false)
     {
         // is template
         run_cvm(cid);
@@ -181,7 +192,7 @@ int argc, char *argv[]
 // , char *cb_out, char *cb_in
 ) {
     struct encl_map_info encl_map;
-    void *base = f->isol.base;
+    void *base = (void*)f->isol.base;
     unsigned long size = f->isol.size;
     unsigned long cmp_begin = f->isol.begin;
     unsigned long cmp_end = f->isol.end;
@@ -194,13 +205,13 @@ int argc, char *argv[]
         while (1);
     }
 
-    if (encl_map.base != (unsigned long)base) {
+    if (encl_map.base != base) {
         printf("mapped at wrong addres [%p]:[%p], die\n", encl_map.base, base);
         while (1);
     }
 
     if(encl_map.size > CVM_MAX_SIZE) {
-        log("Actual cVM is bigger(0x%lx) than it could be(0x%lx), die\n", encl_map.size, CVM_MAX_SIZE);
+        log("Actual cVM is bigger(0x%lx) than it could be(0x%x), die\n", encl_map.size, CVM_MAX_SIZE);
         while(1);
     }
     dlog("ELF BASE = %p, MAP SIZE = %lx, ENTRY = %p\n", encl_map.base, encl_map.size, encl_map.entry_point);
@@ -219,7 +230,7 @@ int argc, char *argv[]
         while (1)
             ;
     } else {
-        dlog("encl_map.ret = %p\n", encl_map.ret_point);
+        dlog("encl_map.ret = %p\n", (void*)encl_map.ret_point);
     }
 
     cvms[cid].host_exit_addr = (uint64_t)encl_map.host_exit;
@@ -250,12 +261,12 @@ int argc, char *argv[]
             } else if(cr[j].perms == 0x4000000000000000ll) { // Constant
                 rel_cap = datacap_create((void*)f->isol.base + cr[j].addr, (void*)f->isol.base + cr[j].addr + cr[j].len);
             } else {
-                log("Wrong Perm! 0x%llx, die\n", cr[j].perms);
+                log("Wrong Perm! 0x%lx, die\n", cr[j].perms);
                 while(1);
             }
 
             CHERI_CAP_PRINT(rel_cap);
-            st_cap(cr[j].dst + f->isol.base, rel_cap);
+            st_cap((void*)(cr[j].dst + f->isol.base), rel_cap);
         }
     }
 
@@ -571,8 +582,8 @@ void *run_cvm(int cid)
         CHERI_CAP_PRINT(cinv_args.caps[8]);
     } else {
         // TODO: no arm_sim here
-        sp = mon_to_comp(sp, me->sbox);
-        me->c_tp = mon_to_comp(me->c_tp, me->sbox);
+        sp = (void*)mon_to_comp((unsigned long)sp, me->sbox);
+        me->c_tp = (void*)mon_to_comp((unsigned long)me->c_tp, me->sbox);
     }
 
     if (me->sbox->use_scl) {
@@ -584,7 +595,7 @@ void *run_cvm(int cid)
 
         void* __capability sh_st_cap = datacap_create((void*)((unsigned long)sh_st), (unsigned long)sh_st+4096*10);
         sh_st_cap = cheri_setaddress(sh_st_cap, sh_st);
-        st_cap((unsigned long)me->c_tp+128, sh_st_cap);
+        st_cap((void*)me->c_tp+128, sh_st_cap);
 
         struct cap_relocs_s *cr = cvms[2].cr;
         unsigned int cr_number = cvms[2].cap_relocs_size/sizeof(struct cap_relocs_s);
@@ -614,11 +625,18 @@ void *run_cvm(int cid)
     tp_args[0] = me->sbox->top - me->sbox->stack_size + 0x1000;
     tp_args[1] = me->sbox->cid;
 
+    profiler_end(&(profilers[SANDBOX_INIT]));
+
+    profiler_begin(&(profilers[WORKLOAD_TOTAL]));
+    profiler_begin(&(profilers[WORKLOAD_PREPARE]));
+
+    uint64_t args_addr = &(cinv_args);
+
     mv_tp((unsigned long)me->c_tp);
     // TODO: may corrupt cinv_args?
     // TODO: use asm here to avoid &conv_args value change due to the change of $sp?
-    __asm__ __volatile__("mv sp, %0;" ::"r"(sp)
-                         : "memory");
+    // __asm__ __volatile__("mv sp, %0;" ::"r"(sp)
+                          // : "memory");
 
     cinv(
 #if 0
@@ -637,7 +655,8 @@ void *run_cvm(int cid)
 #else
         // auxv[1] /* AT_BASE */ + 0x0e000000 + 0x1000, // local_cap_store  //-> 0x2e001000
         tp_args[0], // local_cap_store address (per thread?)
-        &cinv_args
+        &cinv_args,
+        sp
 #endif
     );
 

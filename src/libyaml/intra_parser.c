@@ -192,13 +192,17 @@ int consume_event(struct parser_state *s, yaml_event_t *event)
                 s->state = STATE_ILIST;
             } else if (strcmp(value, "fork") == 0) {
                 s->state = STATE_FFORK;
+            } else if (strcmp(value, "template") == 0) {
+                s->state = STATE_FTEMPLATE;
+            } else if (strcmp(value, "resume") == 0) {
+                s->state = STATE_FRESUME;
             } else {
                 fprintf(stderr, "Unexpected key: %s\n", value);
                 return FAILURE;
             }
             break;
         case YAML_MAPPING_END_EVENT:
-            add_cvm(&s->flist, s->f.name, s->f.disk, s->f.runtime, s->f.net, s->f.args, s->f.isol.base, s->f.isol.size, s->f.isol.begin, s->f.isol.end, s->f.cb_out, s->f.cb_in, s->f.wait, s->f.fork);
+            add_cvm(&s->flist, s->f.name, s->f.disk, s->f.runtime, s->f.net, s->f.args, s->f.isol.base, s->f.isol.size, s->f.isol.begin, s->f.isol.end, s->f.cb_out, s->f.cb_in, s->f.wait, s->f.fork, s->f.template, s->f.resume);
             free(s->f.name);
             free(s->f.disk);
             free(s->f.runtime);
@@ -295,6 +299,30 @@ int consume_event(struct parser_state *s, yaml_event_t *event)
         switch (event->type) {
         case YAML_SCALAR_EVENT:
             s->f.fork = strtol((char *)event->data.scalar.value, NULL, 10);
+            s->state = STATE_FKEY;
+            break;
+        default:
+            fprintf(stderr, "Unexpected event %d in state %d.\n", event->type, s->state);
+            return FAILURE;
+        }
+        break;
+
+    case STATE_FTEMPLATE:
+        switch (event->type) {
+        case YAML_SCALAR_EVENT:
+            s->f.template = strtol((char*)event->data.scalar.value, NULL, 10);
+            s->state = STATE_FKEY;
+            break;
+        default:
+            fprintf(stderr, "Unexpected event %d in state %d.\n", event->type, s->state);
+            return FAILURE;
+        }
+        break;
+
+    case STATE_FRESUME:
+        switch (event->type) {
+        case YAML_SCALAR_EVENT:
+            s->f.resume = strtol((char*)event->data.scalar.value, NULL, 10);
             s->state = STATE_FKEY;
             break;
         default:

@@ -292,7 +292,8 @@ struct s_box {
 	uint64_t start_time;
 	int t_cid;
 	int fork;
-	int use_tfork;
+  int is_template;
+  bool resume;
 	uint64_t host_exit_addr;
 	unsigned long cid;
 };

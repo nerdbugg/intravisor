@@ -27,7 +27,7 @@ char *bail_strdup(const char *s) {
 	return c;
 }
 
-void add_cvm(struct cvm **cvms, char *name, char *disk, char *runtime, char *net, char *args, long base, long size, long begin, long end, char *cb_out, char *cb_in, int wait, int fork) {
+void add_cvm(struct cvm **cvms, char *name, char *disk, char *runtime, char *net, char *args, long base, long size, long begin, long end, char *cb_out, char *cb_in, int wait, int fork, int template, int resume) {
 	struct cvm *f = bail_alloc(sizeof(*f));
 	memset(f, 0, sizeof(struct cvm));
 	if(name) 
@@ -51,6 +51,8 @@ void add_cvm(struct cvm **cvms, char *name, char *disk, char *runtime, char *net
 	f->isol.end = end;
 	f->wait = wait;
 	f->fork = fork;
+  f->template = template;
+  f->resume = resume;
 
 	if (!*cvms) {
 		*cvms = f;
