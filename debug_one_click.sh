@@ -8,9 +8,8 @@ cd src
 
 make clean
 
-#make MMAP_COMBINE=1
-make
-#make TFORK=1
+#make TFORK=1 DEBUG=1
+make DEBUG=1
 
 sync-vmshare.sh
 
