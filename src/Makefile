@@ -7,7 +7,7 @@ OBJDIR := build
 SRC_LKL := lkl_wrap/iomem.c lkl_wrap/jmp_buf.c lkl_wrap/posix-host.c lkl_wrap/virtio_net_fd.c main.c
 SRC_YAML := libyaml/src/api.c libyaml/src/dumper.c libyaml/src/emitter.c libyaml/src/loader.c libyaml/src/parser.c libyaml/src/reader.c libyaml/src/scanner.c libyaml/src/writer.c libyaml/intra_parser.c libyaml/intravisor.c
 SRC_LOADER := load_elf/load_elf.c
-SRC_COMMON := common/utils.c
+SRC_COMMON := common/utils.c common/profiler.c
 SRC_TFORK := tfork/tfork.c
 SRC_CVM := cvm/init.c cvm/restore.c cvm/template.c
 SRC_DAEMON := daemon.c
@@ -29,6 +29,13 @@ endif
 
 ifdef DEBUG
   CFLAGS += -DDEBUG
+else
+	CFLAGS += -O2 -fno-omit-frame-pointer
+endif
+
+#TODO: add mmap_combine
+ifdef MMAP_COMBINE
+	CFLAGS += -DMMAP_COMBINE
 endif
 
 ifdef HC_TRACE
@@ -39,6 +46,10 @@ endif
 ifdef CONFIG
   CFLAGS += -include fake_header/cheri_builtin.h
   # TODO: set a fake $(CC) rather than use --ignore-errors?
+endif
+
+ifdef PROFILER_US
+	CFLAGS += -DPROFILER_US
 endif
 
 target_c = ${OBJDIR}/$(patsubst %.c,%.o,$(notdir ${1})) 

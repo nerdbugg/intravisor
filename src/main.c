@@ -1,12 +1,14 @@
+#include <stdio.h>
 #include <time.h>
 #include <sys/time.h>
 #include <assert.h>
 
 #include "monitor.h"
 #include "tfork.h"
-#include "common/utils.h"
-#include "cvm/init.h"
 #include "common/log.h"
+#include "common/utils.h"
+#include "common/profiler.h"
+#include "cvm/init.h"
 #include "hostcalls/host_syscall_callbacs.h"
 #include "hostcalls/hostcall_tracer.h"
 #include "hostcalls/fs/fd.h"
@@ -31,7 +33,7 @@ extern const int TFORK_FAILED;
 #if SIM
 extern void __inline__ cinv(void *, void *, void *, void *, void *, void *, void *, void *);
 #else
-extern void cinv(void *, void *);
+extern void cinv(void *, void *, void*);
 #endif
 
 void parse_cmdline(char *argv[], const char *disk_img, const char *runtime_so, char **yaml_cfg, int *skip_argc) {
@@ -177,15 +179,18 @@ int monitor_main(int argc, char *argv[]) {
 		printf("usage: monitor -y config.yaml\n"); exit(1);
 	}
 
+  profiler_begin(&(profilers[E2E]));
+  profiler_begin(&(profilers[PARSE_CONFIG]));
+
 	struct parser_state *state = run_yaml_scenario(yaml_cfg);
 	if(state == 0) {
 		printf("yaml is corrupted, die\n"); exit(1);
 	}
-
 	dlog("state = %p\n", state);
 	dlog("state->clist = %p\n", state->clist);
-
 	dlog("[%3d ms]: finish parse yaml\n", gettime());
+
+  profiler_end(&(profilers[PARSE_CONFIG]));
 
 	for (struct capfile *f = state->clist; f; f = f->next) {
 		// printf("capfile: name=%s, data='%s', size=0x%lx, addr=0x%lx \n", f->name, f->data, f->size, f->addr);
@@ -196,6 +201,14 @@ int monitor_main(int argc, char *argv[]) {
 	// link_cvm(state->flist);
 	
 	for (struct cvm *f = state->flist; f; f = f->next) {
+    if(f->resume == true) {
+      // NOTE: regard current boot as resume 
+      // asume template has been initialized, no strict guard here
+      profiler_begin(&(profilers[SANDBOX_RESUME]));
+    } else {
+      profiler_begin(&(profilers[SANDBOX_INIT]));
+    }
+
 		create_and_start_cvm(f);
 	}
 	
@@ -205,6 +218,11 @@ int monitor_main(int argc, char *argv[]) {
 		void *cret;
 		pthread_join(ct[0].tid, &cret);
 	}
+  profiler_end(&(profilers[WORKLOAD_EXECUTE]));
+  profiler_end(&(profilers[WORKLOAD_RESUME]));
+  profiler_end(&(profilers[WORKLOAD_TOTAL]));
+  profiler_end(&(profilers[E2E]));
+  profiler_dump();
 	printf("all cvm exit, monitor exit.\n");
 	return 0;
 }

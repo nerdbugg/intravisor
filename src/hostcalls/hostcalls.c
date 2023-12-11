@@ -6,6 +6,8 @@
 
 #include "monitor.h"
 #include "tfork.h"
+#include "common/profiler.h"
+#include "common/utils.h"
 #include "carrier_thread.h"
 #include "hostcall_tracer.h"
 #include "host_syscall_callbacs.h"
@@ -393,15 +395,24 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 //SAVE
 /// 
 		case 115:
-			// when cvm is configured fork:0, just return
-			if (!ct->sbox->fork)
+      profiler_end(&(profilers[WORKLOAD_PREPARE]));
+
+      profiler_begin(&(profilers[SNAPSHOT_GEN]));
+
+			// save hostcall no effect when configured is_template false
+			if (!ct->sbox->is_template) {
+        // NOTE: test in single cvm case
+        profiler_begin(&(profilers[WORKLOAD_EXECUTE]));
 				break;
+      }
+
 			ct->notified = true;
 			if (ct == ct->sbox->threads) {
 				notify_other_thread_save(ct);
 			}
-			// executed during return if notified==true
-			// save_cur_thread_and_exit(cid, ct);
+
+      printf("save this cvm, cid=%d\n", sboxptr_to_cid(ct->sbox));
+      save_cur_thread_and_exit(sboxptr_to_cid(ct->sbox), ct);
 			break;
 #endif
 ////
@@ -409,10 +420,10 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 //// these 3 calls are used for networking. 
 		case 300:
 //			ret = open(a0, a1); //FreeBSD and musl have different Flags
-			ret = (long) open_tap(comp_to_mon(a0, ct->sbox));
+			ret = (long) open_tap((char*)comp_to_mon(a0, ct->sbox));
 			break;
 		case 301:
-			ret = (long) pipe(comp_to_mon(a0, ct->sbox));
+			ret = (long) pipe((int*)comp_to_mon(a0, ct->sbox));
 			break;
 		case 302:
 			ret = (long) fcntl(a0, F_SETFL, O_NONBLOCK); //see the comment above
@@ -424,7 +435,7 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 			printf("deprecated %ld\n", t5); while(1);
 		case 403:
 			printf("TODO: %d\n", __LINE__);
-			ret = (long) host_make_call(ct->sbox->threads, comp_to_mon(a0, ct->sbox), a1);
+			ret = (long) host_make_call(ct->sbox->threads, (void*)comp_to_mon(a0, ct->sbox), (void*)a1);
 			break;
 		case 404:
 			printf("deprecated %ld\n", t5); while(1);
@@ -648,11 +659,6 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 		printf("OUT: %p: %lx %lx %lx %lx %lx %lx %lx %lx, %d \n", getSP(), a0, a1, a2, a3, a4, a5, a6, a7, t5);
 #endif
 
-	if (ct->notified && ct->sbox->fork) {
-		ct->notified = false;
-		printf("save this cvm, cid=%d\n", sboxptr_to_cid(ct->sbox));
-		save_cur_thread_and_exit(sboxptr_to_cid(ct->sbox), ct);
-	}
 
 	if(getTP() != ct->m_tp) {
 		printf("TP has changed %p %p\n", getTP(), ct->m_tp);
