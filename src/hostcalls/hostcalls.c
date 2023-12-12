@@ -271,7 +271,6 @@ long hostcall(long a0, long a1, long a2, long a3, long a4, long a5, long a6, lon
 			lkl_host_ops.thread_detach();
 			break;
 		case 13:
-			printf("cvm(cid=%d,thread=%d) called host_exit, running %ldms\n", sboxptr_to_cid(ct->sbox), ct_id, get_ms_timestamp() - ct->sbox->start_time);
 			destroy_carrie_thread(ct->sbox->threads);
 			break;
 		case 14:

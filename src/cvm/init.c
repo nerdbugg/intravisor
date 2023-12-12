@@ -31,8 +31,6 @@ void create_and_start_cvm(struct cvm *f)
     struct s_box *cvm = &cvms[cid];
     struct c_thread *ct = cvm->threads;
 
-    cvm->start_time = get_ms_timestamp();
-
     if (pthread_mutex_init(&cvm->ct_lock, NULL) != 0)
     {
         printf("\n mutex init failed\n");
