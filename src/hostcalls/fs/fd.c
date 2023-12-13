@@ -35,6 +35,10 @@ int fdtable_fork(fdtable *old_ft, fdtable *new_ft) {
   // share fd object
   int i = 3;
   for(;i<FDTABLE_MAX_FILES;i++) {
+    if (old_ft->files[i].f_flags == 0) {
+      break;
+    }
+
     new_ft->files[i] = old_ft->files[i];
     // NOTE: current template exit does not close file
     new_ft->files[i].sharedfd->ref_count++;
