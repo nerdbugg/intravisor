@@ -16,15 +16,16 @@ struct cinv_s
     void *__capability caps[10];
 };
 
+typedef void*(thread_func)(void*);
+
 void *run_cvm(int cid);
-int cvm_worker(struct cvm *f);
+void* cvm_worker(void* arg);
 extern int init_pthread_stack(struct s_box *cvm);
 extern int init_cvm(int cid, struct cvm *f, int argc, char *argv[]);
 int gen_caps(struct s_box *cvm, struct c_thread *ct);
 void cinv(void* local_cap_store, struct cinv_s* args, void* sp);
 
-void create_and_start_cvm(struct cvm *f)
-{
+struct s_box *build_from_config(struct cvm *f) {
     int cid = f->isol.base / CVM_MAX_SIZE;
     dlog("Deploy cthread of cvm, cid=%d\n", cid);
 
@@ -50,7 +51,7 @@ void create_and_start_cvm(struct cvm *f)
     cvm->cmp_end = f->isol.end;
     cvm->box_size = f->isol.size;
     ct->stack_size = (MAX_THREADS + 1) * STACK_SIZE;
-    ct->stack = (void*)(cvm->cmp_end - ct->stack_size);
+    ct->stack = (void *)(cvm->cmp_end - ct->stack_size);
 
     int t_cid = find_template(cid, f->runtime);
     cvm->t_cid = t_cid;
@@ -60,7 +61,15 @@ void create_and_start_cvm(struct cvm *f)
     cvm->is_template = f->template;
 
     cvm->resume = f->resume;
-    cvm->resume = (cvm->t_cid>0) && cvm->resume;
+    cvm->resume = (cvm->t_cid > 0) && cvm->resume;
+    return cvm;
+}
+
+void create_and_start_cvm(struct cvm *f)
+{
+    struct s_box *cvm = build_from_config(f);
+    struct c_thread *ct = cvm->threads;
+    int ret;
 
     // init cvm fdtable
     fdtable_init(&(cvm->fdtable));
@@ -69,9 +78,8 @@ void create_and_start_cvm(struct cvm *f)
         init_pthread_stack(cvm);
     }
     else {
-        restore_cvm_region(cvm, &(cvms[t_cid]));
+        restore_cvm_region(cvm, &(cvms[cvm->t_cid]));
     }
-    
 
     // TODO: maybe stack conflicts when exec load template.
     if (cvm -> resume)
@@ -162,8 +170,9 @@ int build_cvm(struct cvm *f)
     return cid;
 }
 
-int cvm_worker(struct cvm *f)
+void* cvm_worker(void* arg)
 {
+    struct cvm* f = (struct cvm*)arg;
     dlog("***************** [%ld] Deploy '%s' ***************\n", f->isol.base/CVM_MAX_SIZE, f->name);
     dlog("BUILDING cvm: name=%s, disk=%s, runtime=%s, net=%s, args='%s', base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, cb_in = '%s', cb_out = '%s' wait = %ds\n", f->name, f->disk, f->runtime, f->net, f->args, f->isol.base, f->isol.size, f->isol.begin, f->isol.end, f->cb_in, f->cb_out, f->wait);
 
@@ -181,6 +190,7 @@ int cvm_worker(struct cvm *f)
         dlog("load template, cid=%d, t_cid=%d\n", cid, cvm->t_cid);
         restore_from_template(cid);
     }
+    return NULL;
 }
 
 
@@ -631,10 +641,6 @@ void *run_cvm(int cid)
     uint64_t args_addr = &(cinv_args);
 
     mv_tp((unsigned long)me->c_tp);
-    // TODO: may corrupt cinv_args?
-    // TODO: use asm here to avoid &conv_args value change due to the change of $sp?
-    // __asm__ __volatile__("mv sp, %0;" ::"r"(sp)
-                          // : "memory");
 
     cinv(
 #if 0
