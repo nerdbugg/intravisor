@@ -20,9 +20,9 @@ typedef void*(thread_func)(void*);
 
 void *run_cvm(int cid);
 void* cvm_worker(void* arg);
-extern int init_pthread_stack(struct s_box *cvm);
-extern int init_cvm(int cid, struct cvm *f, int argc, char *argv[]);
-int gen_caps(struct s_box *cvm, struct c_thread *ct);
+int init_cvm(int cid, struct cmp_s *comp, char *libos, char *disk, 
+             int argc, char *argv[], char *cb_out, char *cb_in);
+int init_cvm_caps(struct s_box *cvm, struct c_thread *ct);
 void cinv(void* local_cap_store, struct cinv_s* args, void* sp);
 
 struct s_box *build_from_config(struct cvm *f) {
@@ -71,8 +71,6 @@ void create_and_start_cvm(struct cvm *f)
     struct c_thread *ct = cvm->threads;
     int ret;
 
-    // init cvm fdtable
-    fdtable_init(&(cvm->fdtable));
 
     if (cvm->resume == false) {
         init_pthread_stack(cvm);
@@ -121,7 +119,7 @@ void create_and_start_cvm(struct cvm *f)
             }
             pthread_join(ct[i].tid, &cret);
 
-            dlog("cvm[%d]-thread[%d] has exited.\n", cid, i);
+            dlog("cvm[%ld]-thread[%d] has exited.\n", cvm-cvms, i);
         }
 
         dlog("join returned\n");
@@ -160,7 +158,8 @@ int build_cvm(struct cvm *f)
     {
         // todo: sanitise base addresses, check cvms/sbox max number
         // so far it is the best I can offer.
-        init_cvm(cid, f, c_argc, (char**)c_argv);
+        init_cvm(cid, &comp, f->runtime, f->disk, 
+                 c_argc, (char**)c_argv, f->cb_out, f->cb_in);
     }
     else
     {
@@ -193,23 +192,40 @@ void* cvm_worker(void* arg)
     return NULL;
 }
 
+void init_cvm_thread(struct s_box *cvm, void* func, char* cb_in, char* cb_out, int argc, char* argv[]) {
+  struct c_thread *ct = cvm->threads;
+  for (int i = 0; i < MAX_THREADS; i++) {
+      ct[i].id = -1;
+      ct[i].sbox = cvm;
+  }
 
-int init_cvm(int cid, struct cvm *f, 
-// struct cmp_s *comp, char *libos, char *disk, 
-int argc, char *argv[] 
-// , char *cb_out, char *cb_in
-) {
+  ct[0].id = 0;
+  ct[0].func = func;
+  ct[0].cb_in = cb_in;
+  ct[0].cb_out = cb_out;
+  ct[0].stack_size = STACK_SIZE;
+  ct[0].stack = (void *)((unsigned long)cvm->top - STACK_SIZE);
+  ct[0].arg = NULL;
+  ct[0].sbox = cvm;
+
+  ct[0].argc = argc;
+  ct[0].argv = argv;
+}
+
+int init_cvm_mem(int cid, char *libos) {
+    struct s_box *cvm = &(cvms[cid]);
     struct encl_map_info encl_map;
-    void *base = (void*)f->isol.base;
-    unsigned long size = f->isol.size;
-    unsigned long cmp_begin = f->isol.begin;
-    unsigned long cmp_end = f->isol.end;
+
+    void *base = (void*)cvm->cmp_begin;
+    unsigned long size = cvm->box_size;
+    unsigned long cmp_begin = cvm->cmp_begin;
+    unsigned long cmp_end = cvm->cmp_end;
 
     memset(&encl_map, 0, sizeof(struct encl_map_info));
 
-    load_elf(f->runtime, base, &encl_map);
+    load_elf(libos, base, &encl_map);
     if (encl_map.base < 0) {
-        printf("Could not load '%s', die\n", f->runtime);
+        printf("Could not load '%s', die\n", libos);
         while (1);
     }
 
@@ -251,30 +267,30 @@ int argc, char *argv[]
 	    cvms[cid].cap_relocs = encl_map.cap_relocs;
         struct cap_relocs_s *cr = (struct cap_relocs_s *)encl_map.cap_relocs;
         for (int j = 0; j < encl_map.cap_relocs_size / sizeof(struct cap_relocs_s); j++) {
-            dlog("Create cap: %p Base: %p Length: %ld Perms: %lx Unk = %ld\n", f->isol.base + cr[j].dst, cr[j].addr, cr[j].len, cr[j].perms, cr[j].unknown);
+            dlog("Create cap: %p Base: %p Length: %ld Perms: %lx Unk = %ld\n", base + cr[j].dst, (void*)cr[j].addr, cr[j].len, cr[j].perms, cr[j].unknown);
             void *__capability rel_cap;
             if (cr[j].perms == 0x8000000000000000ll) { // Function
                 // All caps are PCC-size. It is itended otherwise AUIPC doesn't work
-                rel_cap = pure_codecap_create((void *)f->isol.base, (void *)f->isol.base + f->isol.size);
-                rel_cap = cheri_setaddress(rel_cap, f->isol.base + cr[j].addr);
+                rel_cap = pure_codecap_create((void *)base, (void *)base + size);
+                rel_cap = cheri_setaddress(rel_cap, base + cr[j].addr);
             } else if(cr[j].perms == 0x0ull) { // Object
                 // TODO: we need something better
                 if (cr[j].len == 0xabba) { // size of local_cap_store defined in elf file
                     log("replace cap for caps\n");
                     log("RISCV ABI\n");
                     // redefine it in base+0xe001000 - base+0xe002000
-                    rel_cap = datacap_create((void *)f->isol.base + 0xe001000, f->isol.base + 0xe002000);
+                    rel_cap = datacap_create((void *)base + 0xe001000, base + 0xe002000);
                 } else
-                    rel_cap = datacap_create((void *)f->isol.base + cr[j].addr, (void *)f->isol.base + cr[j].addr + cr[j].len);
+                    rel_cap = datacap_create((void *)base + cr[j].addr, (void *)base + cr[j].addr + cr[j].len);
             } else if(cr[j].perms == 0x4000000000000000ll) { // Constant
-                rel_cap = datacap_create((void*)f->isol.base + cr[j].addr, (void*)f->isol.base + cr[j].addr + cr[j].len);
+                rel_cap = datacap_create((void*)base + cr[j].addr, (void*)base + cr[j].addr + cr[j].len);
             } else {
                 log("Wrong Perm! 0x%lx, die\n", cr[j].perms);
                 while(1);
             }
 
             CHERI_CAP_PRINT(rel_cap);
-            st_cap((void*)(cr[j].dst + f->isol.base), rel_cap);
+            st_cap((void*)(cr[j].dst + base), rel_cap);
         }
     }
 
@@ -293,43 +309,45 @@ int argc, char *argv[]
 
     // setup libos field
     memset(cvms[cid].libos, 0, MAX_LIBOS_PATH);
-    strcpy(cvms[cid].libos, f->runtime);
+    strcpy(cvms[cid].libos, libos);
 
     cvms[cid].cmp_begin = cmp_begin;
     cvms[cid].cmp_end = cmp_end;
+
+  return 0;
+}
+
+int init_cvm_fs(int cid, char* disk) {
+    // init cvm fdtable
+    fdtable_init(&(cvms[cid].fdtable));
 
 #if 0
 	cvms[cid].fd = create_console(cid);
 #else
     cvms[cid].fd = STDOUT_FILENO;
 #endif
-    if (f->disk)
-        strncpy(cvms[cid].disk_image, f->disk, sizeof(cvms[cid].disk_image));
 
-    struct c_thread *ct = cvms[cid].threads;
-    ////////////////////
-    for (int i = 0; i < MAX_THREADS; i++) {
-        ct[i].id = -1;
-        ct[i].sbox = &cvms[cid];
-    }
+    if (disk)
+      strncpy(cvms[cid].disk_image, disk, sizeof(cvms[cid].disk_image));
+}
 
-    ct[0].id = 0;
-    ct[0].func = encl_map.entry_point;
-    ct[0].cb_in = f->cb_in;
-    ct[0].cb_out = f->cb_out;
-    ct[0].stack_size = STACK_SIZE;
-    ct[0].stack = (void *)((unsigned long)cvms[cid].top - STACK_SIZE);
-    ct[0].arg = NULL;
-    ct[0].sbox = &cvms[cid];
+int init_cvm(int cid, struct cmp_s *comp, char *libos, char *disk, 
+             int argc, char *argv[], char *cb_out, char *cb_in) {
+    struct s_box *cvm = &(cvms[cid]);
 
-    ct[0].argc = argc;
-    ct[0].argv = argv;
+    init_cvm_mem(cid, libos);
+
+    init_cvm_fs(cid, disk);
+
+    // cvm->entry is initialized in init_cvm_mem
+    init_cvm_thread(&cvms[cid], cvm->entry, cb_in, cb_out, argc, argv);
 
     /*** gen caps ***/
     // do we really need to save the sealcap?
-    gen_caps(&cvms[cid], &ct[0]);
+    init_cvm_caps(&cvms[cid], &(cvms[cid].threads[0]));
     return 0;
 }
+
 
 void *run_cvm(int cid)
 {
@@ -356,8 +374,11 @@ void *run_cvm(int cid)
     //	snprintf(env5, 128, "_PYTHON_SYSCONFIGDATA_NAME=_sysconfigdata");
 
     me->m_tp = getTP();
+    // NOTE: stack bottom 4KB reserved for tp
     me->c_tp = me->stack + 4096;
 
+    // NOTE: stack top 3*4KB reserved for cenv, cvm_worker stack
+    // stack top 4*4KB is the top of inner cvm sp
     char *cenv = (char *)(sp_read - 4096 * 3);         // originally, here was *2, but networking corrupts this memory
     volatile unsigned long *sp = (sp_read - 4096 * 4); // I don't know why, but without volatile sp gets some wrong value after initing CENV in -O2
 
@@ -670,7 +691,7 @@ void *run_cvm(int cid)
 #endif
 }
 
-int gen_caps(struct s_box *cvm, struct c_thread *ct)
+int init_cvm_caps(struct s_box *cvm, struct c_thread *ct)
 {
     ct->sbox->box_caps.sealcap_size = sizeof(ct->sbox->box_caps.sealcap);
     if (sysctlbyname("security.cheri.sealcap", &ct->sbox->box_caps.sealcap, &ct->sbox->box_caps.sealcap_size, NULL, 0) < 0) {
