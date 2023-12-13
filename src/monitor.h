@@ -190,6 +190,7 @@ struct c_thread {
 	int argc;
 	char **argv;
 
+  // used when generating snapshot
 	pthread_t tid;
 	long task_id; // the id obtained by thr_self. 
 	pthread_attr_t tattr;

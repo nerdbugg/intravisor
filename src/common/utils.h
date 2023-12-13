@@ -1,3 +1,4 @@
+#include "monitor.h"
 #include <cheri/cheri.h>
 #include <cheri/cheric.h>
 
