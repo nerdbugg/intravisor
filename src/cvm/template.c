@@ -3,6 +3,7 @@
 #include "monitor.h"
 #include "common/log.h"
 #include "common/utils.h"
+#include "hostcalls/fs/fd.h"
 #include "hostcalls/host_syscall_callbacs.h"
 
 int find_template(int cid, char *libos)
@@ -42,6 +43,10 @@ int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[])
         printf("\n mutex init failed\n");
         return 1;
     }
+
+    // fdtable restore
+    fdtable_init(&(cvm->fdtable));
+    fdtable_fork(&(cvm->fdtable), &(t_cvm->fdtable));
 
     // todo: cvm->disk_image, when running baremetal, disk_image is NULL;
     struct c_thread *ct = cvm->threads;

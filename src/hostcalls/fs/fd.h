@@ -38,6 +38,8 @@ struct fdtable {
 typedef struct fdtable fdtable;
 
 int fdtable_init(fdtable *ft);
+int fdtable_fork(fdtable *old_ft, fdtable *new_ft);
+
 int vfscore_allocfd(fdtable *ft);
 int init_stdio(struct fdtable *ft);
 

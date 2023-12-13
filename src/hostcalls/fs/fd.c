@@ -31,6 +31,17 @@ int fdtable_init(fdtable *ft) {
   return init_stdio(ft);
 }
 
+int fdtable_fork(fdtable *old_ft, fdtable *new_ft) {
+  // share fd object
+  int i = 3;
+  for(;i<FDTABLE_MAX_FILES;i++) {
+    new_ft->files[i] = old_ft->files[i];
+    // NOTE: current template exit does not close file
+    new_ft->files[i].sharedfd->ref_count++;
+  }
+  return 0;
+}
+
 shared_fd *vfscore_sharedfd_init(int sysfd) {
   int i = 3;
   for (; i < FDTABLE_MAX_FILES * 10; i++) {
