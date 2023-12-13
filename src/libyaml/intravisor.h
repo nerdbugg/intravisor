@@ -20,6 +20,7 @@ struct cvm {
     char *args;
     char *cb_in;
     char *cb_out;
+    char *snapshot_path;
 	  struct isol_s isol;
 	  int wait;
     int fork;
@@ -62,6 +63,7 @@ enum state {
     STATE_FFORK,    /* cvm tfork value */
     STATE_FTEMPLATE,/* cvm template value */
     STATE_FRESUME,  /* cvm resume value */
+    STATE_FSNAPSHOT_PATH, /* cvm snapshot_path value */
 ///
     STATE_ILIST,    /* cvm list */
     STATE_IVALUES,  /* cvm key-value pairs */
@@ -99,7 +101,8 @@ void bail(const char *msg);
 void *bail_alloc(size_t size);
 char *bail_strdup(const char *s);
 
-void add_cvm(struct cvm **cvms, char *name, char *disk, char *runtime, char *net, char *args, long base, long size, long begin, long end, char *cb_out, char *cb_in, int wait, int fork, int template, int resume);
+void add_cvm(struct cvm **cvms, char *name, char *disk, char *runtime, char *net, char *args, long base, long size, long begin, long end, char *cb_out, char *cb_in, 
+    int wait, int fork, int template, int resume, char *snapshot_path);
 void add_capfile(struct capfile **capfiles, char *name, char *data, long size, long addr);
 
 void destroy_cvms(struct cvm **cvms);

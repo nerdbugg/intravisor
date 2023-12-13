@@ -196,13 +196,16 @@ int consume_event(struct parser_state *s, yaml_event_t *event)
                 s->state = STATE_FTEMPLATE;
             } else if (strcmp(value, "resume") == 0) {
                 s->state = STATE_FRESUME;
+            } else if (strcmp(value, "snapshot_path") == 0) {
+                s->state = STATE_FSNAPSHOT_PATH;
             } else {
                 fprintf(stderr, "Unexpected key: %s\n", value);
                 return FAILURE;
             }
             break;
         case YAML_MAPPING_END_EVENT:
-            add_cvm(&s->flist, s->f.name, s->f.disk, s->f.runtime, s->f.net, s->f.args, s->f.isol.base, s->f.isol.size, s->f.isol.begin, s->f.isol.end, s->f.cb_out, s->f.cb_in, s->f.wait, s->f.fork, s->f.template, s->f.resume);
+            add_cvm(&s->flist, s->f.name, s->f.disk, s->f.runtime, s->f.net, s->f.args, s->f.isol.base, s->f.isol.size, s->f.isol.begin, s->f.isol.end, s->f.cb_out, s->f.cb_in, 
+                    s->f.wait, s->f.fork, s->f.template, s->f.resume, s->f.snapshot_path);
             free(s->f.name);
             free(s->f.disk);
             free(s->f.runtime);
@@ -275,6 +278,22 @@ int consume_event(struct parser_state *s, yaml_event_t *event)
                 free(s->f.net);
             }
             s->f.net = bail_strdup((char *)event->data.scalar.value);
+            s->state = STATE_FKEY;
+            break;
+        default:
+            fprintf(stderr, "Unexpected event %d in state %d.\n", event->type, s->state);
+            return FAILURE;
+        }
+        break;
+
+    case STATE_FSNAPSHOT_PATH:
+        switch (event->type) {
+        case YAML_SCALAR_EVENT:
+            if (s->f.snapshot_path) {
+                fprintf(stderr, "Warning: duplicate 'snapshot_path' key.\n");
+                free(s->f.snapshot_path);
+            }
+            s->f.snapshot_path = bail_strdup((char *)event->data.scalar.value);
             s->state = STATE_FKEY;
             break;
         default:
