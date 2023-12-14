@@ -10,15 +10,18 @@ SRC_LOADER := load_elf/load_elf.c
 SRC_COMMON := common/utils.c common/profiler.c
 SRC_TFORK := tfork/tfork.c
 SRC_CVM := cvm/init.c cvm/restore.c cvm/template.c
+SRC_IMAGE := $(wildcard image/*.c)
 SRC_DAEMON := daemon.c
 SRC_HOSTCALL := hostcalls/hostcalls.c hostcalls/carrie_thread.c hostcalls/host_cap_calls.c hostcalls/host_cap_files.c \
 		hostcalls/host_syscall_callbacs.c hostcalls/hostcall_tracer.c hostcalls/host_sc.c \
 		hostcalls/fs/fd.c
 
-CFILES  := $(SRC_LKL)  $(SRC_LOADER) $(SRC_YAML) $(SRC_TFORK) $(SRC_CVM) $(SRC_DAEMON) $(SRC_HOSTCALL) $(SRC_COMMON)
+CFILES  := $(SRC_LKL)  $(SRC_LOADER) $(SRC_YAML) $(SRC_TFORK) $(SRC_CVM) $(SRC_DAEMON) $(SRC_HOSTCALL) $(SRC_COMMON) \
+		$(SRC_IMAGE)
 ASFILES := arch/riscv/asm.S
 CFLAGS	:= -I . -I lkl_wrap/include -I load_elf/ -I tfork/ -I lkl_wrap -I libyaml/include -Ilibyaml/src -DHAVE_CONFIG_H -Ilibyaml/ \
-	   -I arch/$(TARGET_ARCH)/include -DTARGET_ARCH="$(TARGET_ARCH)" -D$(TARGET_ARCH) -DCVM_MAX_SIZE=$(CONFIG_CVM_MAX_SIZE)
+	   -I arch/$(TARGET_ARCH)/include -I image\
+		 -DTARGET_ARCH="$(TARGET_ARCH)" -D$(TARGET_ARCH) -DCVM_MAX_SIZE=$(CONFIG_CVM_MAX_SIZE)
 CFLAGS += -DEXTRA_PAYLOAD="(1*1024*1024)"
 
 CFLAGS += -DHYB_CVM
