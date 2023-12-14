@@ -1,0 +1,33 @@
+syntax = "proto2";
+
+message vma_entry {
+  required uint64 start = 1;
+  required uint64 end = 2;
+
+  required uint64 pgoff = 3;
+
+  required uint32 prot = 4;
+  required uint32 flags = 5;
+}
+
+message fdinfo_entry {
+  required uint32 fd = 1;
+  required uint32 flags = 2;
+  required uint64 offset = 3;
+}
+
+message fdinfo {
+  repeated fdinfo_entry fdinfo_entries = 1;
+}
+
+message mm_struct {
+  required uint64 start = 1;
+  required uint64 size = 2;
+  repeated vma_entry vma_entries = 3;
+}
+
+message image {
+  required fdinfo fileinfo = 1;
+  required mm_struct meminfo = 2;
+}
+
