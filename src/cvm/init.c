@@ -59,6 +59,8 @@ struct s_box *build_from_config(struct cvm *f) {
 
   cvm->resume = f->resume;
   cvm->resume = (cvm->t_cid > 0) && cvm->resume;
+
+  cvm->snapshot_path = f->snapshot_path;
   return cvm;
 }
 
@@ -142,7 +144,16 @@ int build_cvm(struct cvm *f) {
     init_cvm(cid, &comp, f->runtime, f->disk, c_argc, (char **)c_argv,
              f->cb_out, f->cb_in);
   } else {
-    fork_cvm(cid, t_cid, &comp, c_argc, (char **)c_argv);
+    if(cvms[cid].fork) {
+      fork_cvm(cid, t_cid, &comp, c_argc, (char **)c_argv);
+    } else {
+      // TODO: complete true restore logic
+      printf("[debug] using snapshot image resume!\n");
+      printf("[debug] called fork_cvm for current debuging\n");
+      fork_cvm(cid, t_cid, &comp, c_argc, (char **)c_argv);
+      printf("[debug] ended of fork_cvm\n");
+      // restore_cvm_from_image(cid, t_cid, &comp, c_argc, (char**)c_argv, f->snapshot_path);
+    }
   }
   // assert(cvms[cid].threads[0].sbox != 0);
   return cid;
@@ -154,14 +165,15 @@ void *cvm_worker(void *arg) {
        f->isol.base / CVM_MAX_SIZE, f->name);
   dlog("BUILDING cvm: name=%s, disk=%s, runtime=%s, net=%s, args='%s', "
        "base=0x%lx, size=0x%lx, begin=0x%lx, end=0x%lx, cb_in = '%s', cb_out = "
-       "'%s' wait = %ds\n",
+       "'%s' wait = %ds, fork=%d, resume = %d, snapshot_path = %s\n",
        f->name, f->disk, f->runtime, f->net, f->args, f->isol.base,
-       f->isol.size, f->isol.begin, f->isol.end, f->cb_in, f->cb_out, f->wait);
+       f->isol.size, f->isol.begin, f->isol.end, f->cb_in, f->cb_out, f->wait,
+       f->fork, f->resume, f->snapshot_path);
 
   int cid = build_cvm(f);
-  dlog("BUILDING cvm complete: cid=%d, disk=%s, runtime=%s, base=0x%lx, "
+  dlog("BUILDING cvm complete: cid=%d, disk=%s, runtime=%s, base=%p, "
        "size=0x%lx, begin=0x%lx, end=0x%lx, syscall_handler = '%ld', "
-       "ret_from_mon = '%ld'\n",
+       "ret_from_mon = '0x%lx'\n",
        cid, cvms[cid].disk_image, cvms[cid].libos, cvms[cid].base,
        cvms[cid].box_size, cvms[cid].cmp_begin, cvms[cid].cmp_end,
        cvms[cid].syscall_handler, cvms[cid].ret_from_mon);
@@ -555,14 +567,16 @@ void *run_cvm(int cid) {
 
 #else
 
-  void *__capability sealed_codecap = me->sbox->box_caps.sealed_codecap;
-  void *__capability sealed_datacap = me->sbox->box_caps.sealed_datacap;
-  void *__capability dcap = me->sbox->box_caps.dcap;
-  void *__capability sealed_codecapt = me->sbox->box_caps.sealed_codecapt;
-  void *__capability sealed_codecapt2 = me->sbox->box_caps.sealed_codecapt2;
-  void *__capability sealed_datacapt = me->sbox->box_caps.sealed_datacapt;
+  void *__capability sealed_codecap = me->sbox->box_caps.sealed_comp_pcc;
+  void *__capability sealed_datacap = me->sbox->box_caps.sealed_comp_ddc;
+  void *__capability dcap = me->sbox->box_caps.comp_ddc;
+  void *__capability sealed_codecapt = me->sbox->box_caps.sealed_hc_pcc;
+  void *__capability sealed_codecapt2 = me->sbox->box_caps.sealed_hc_pcc2;
+  void *__capability sealed_datacapt = me->sbox->box_caps.sealed_mon_ddc;
   void *__capability sealed_ret_from_mon =
       me->sbox->box_caps.sealed_ret_from_mon;
+
+  printf("[debug/init] &sealed_codecap = %p\n", (void*)&sealed_codecap);
 
   struct cinv_s cinv_args;
 
@@ -607,7 +621,7 @@ void *run_cvm(int cid) {
     dlog("ca7: SP cap for purecap cVMs\n");
     CHERI_CAP_PRINT(cinv_args.caps[7]);
 
-    // TODO: cvm c_tp is currently not capability
+    // NOTE: cvm c_tp is currently not capability
     void *__capability tp_cap = datacap_create(
         (void *)((unsigned long)me->c_tp), (unsigned long)me->c_tp + 4096);
     // TODO: is it feasible to set address using capability?
@@ -726,19 +740,19 @@ int init_cvm_caps(struct s_box *cvm, struct c_thread *ct) {
 
   void *__capability dcap =
       datacap_create((void *)ct->sbox->cmp_begin, (void *)ct->sbox->cmp_end);
-  ct->sbox->box_caps.dcap = dcap;
+  ct->sbox->box_caps.comp_ddc = dcap;
 
-  ct->sbox->box_caps.sealed_datacap =
+  ct->sbox->box_caps.sealed_comp_ddc =
       cheri_seal(dcap, ct->sbox->box_caps.sealcap);
-  ct->sbox->box_caps.sealed_codecap =
+  ct->sbox->box_caps.sealed_comp_pcc =
       cheri_seal(ccap, ct->sbox->box_caps.sealcap);
   if (ct->cb_out == NULL) {
     printf("callback_out is empty, use default 'monitor'\n");
     ct->cb_out = "monitor";
   }
-  host_syscall_handler_prb(ct->cb_out, &ct->sbox->box_caps.sealed_codecapt,
-                           &ct->sbox->box_caps.sealed_datacapt,
-                           &ct->sbox->box_caps.sealed_codecapt2);
+  host_syscall_handler_prb(ct->cb_out, &ct->sbox->box_caps.sealed_hc_pcc,
+                           &ct->sbox->box_caps.sealed_mon_ddc,
+                           &ct->sbox->box_caps.sealed_hc_pcc2);
 
   // generate capabilitites for ret_from_mon. TODO: we should make them public
   // and our syscall/hostcall should fetch them todo: we need something better
@@ -767,8 +781,8 @@ int init_cvm_caps(struct s_box *cvm, struct c_thread *ct) {
     // note: use cur cvm's syscall handler cap here, the pcc2 is currently not
     // used, act just as a placeholder todo: figure out the syscall abi here
     host_syscall_handler_adv(cvm->libos, sealed_syscall_pcc_cap,
-                             ct->sbox->box_caps.sealed_datacap,
-                             ct->sbox->box_caps.sealed_codecapt2);
+                             ct->sbox->box_caps.sealed_comp_ddc,
+                             ct->sbox->box_caps.sealed_hc_pcc2);
   }
   // assert(ct->sbox == cvm);
 }

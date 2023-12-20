@@ -216,12 +216,12 @@ struct cs_lock {
 
 
 struct box_caps_s {
-	void * __capability sealed_codecap;
-	void * __capability sealed_datacap;
-	void * __capability dcap;
-	void * __capability sealed_codecapt;
-	void * __capability sealed_codecapt2;
-	void * __capability sealed_datacapt;
+	void * __capability sealed_comp_pcc;
+	void * __capability sealed_comp_ddc;
+	void * __capability comp_ddc;
+	void * __capability sealed_hc_pcc;
+	void * __capability sealed_hc_pcc2;
+	void * __capability sealed_mon_ddc;
 	void * __capability sealed_ret_from_mon;
 
 	void * __capability sealcap;
@@ -294,6 +294,7 @@ struct s_box {
 	int fork;
   int is_template;
   bool resume;
+  char* snapshot_path;
 	uint64_t host_exit_addr;
 	unsigned long cid;
 };

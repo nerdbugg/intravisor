@@ -63,6 +63,7 @@ int fork_cvm(int cid, int t_cid, struct cmp_s *cmp, int argc, char *argv[])
     ct[0].stack = (void *)((unsigned long)cvm->top - STACK_SIZE);
     ct[0].argc = argc;
     ct[0].argv = argv;
+    ct[0].cb_out = t_cvm->threads[0].cb_out;
 
     ct->m_tp = getTP();
     ct->c_tp = (void *)(ct->stack + PAGE_SIZE);

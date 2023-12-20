@@ -1,4 +1,6 @@
+#include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/syscall.h>
 #include <stdint.h>
@@ -10,25 +12,24 @@
 #include <machine/ucontext.h>
 #include <machine/reg.h>
 
+#include "common/list.h"
 #include "monitor.h"
 #include "tfork.h"
 #include "daemon.h"
 #include "common/log.h"
 #include "common/profiler.h"
 #include "hostcalls/carrier_thread.h"
+#include "hostcalls/host_syscall_callbacs.h"
+
+#include "image/image.pb-c.h"
 
 #define SIGSAVE SIGUSR1
 #define RET_COMP_PPC (16 * 11)
 #define RET_COMP_DDC (16 * 12)
 
-#define offsetof(type, field) __offsetof(type, field)
-// borrowed from CheriBSD freebsd64_machdep.c
-#define	CONTEXT64_GPREGS	(offsetof(struct gpregs, gp_sepc) / sizeof(register_t))
-
 const unsigned long TFORK_FAILED = (unsigned long)MAP_FAILED;
 const static int tfork_syscall_num = 577;
 
-map_entry *cvm_map_entry_list[MAX_CVMS];
 int cvm_snapshot_fd[MAX_CVMS];
 
 
@@ -51,12 +52,18 @@ unsigned int parse_permstr(const char *perms)
     return res;
 }
 
-map_entry *get_map_entry_list(int cid)
+void vm_map_entry_list_init(vm_map_entry_list* vm_map_entries) {
+  memset(vm_map_entries, 0, sizeof(struct vm_map_entry_list));
+  INIT_LIST_HEAD(&(vm_map_entries->h));
+}
+
+vm_map_entry_list *get_vm_map_entry_list(int cid)
 {
     FILE *map_file = fopen("/proc/curproc/map", "r");
     assert(map_file != NULL);
 
-    map_entry *map_entry_list = NULL, *rear = NULL;
+    vm_map_entry_list *vm_map_entries = malloc(sizeof(vm_map_entry_list));
+    vm_map_entry_list_init(vm_map_entries);
 
     unsigned long range_low, range_high;
     range_low = cvms[cid].cmp_begin;
@@ -82,24 +89,91 @@ map_entry *get_map_entry_list(int cid)
             break;
 
         int prot = parse_permstr(permstr);
-        map_entry *entry = (map_entry *)malloc(sizeof(map_entry));
-        entry->start = start;
-        entry->end = end;
-        entry->prot = prot;
-        entry->next = NULL;
 
-        if (map_entry_list == NULL)
-        {
-            map_entry_list = entry;
-        }
-        else
-        {
-            rear->next = entry;
-        }
-        rear = entry;
+        vm_map_entry *entry = (vm_map_entry*)malloc(sizeof(vm_map_entry));
+        vma_entry__init(&(entry->e));
+
+        entry->e.start = start;
+        entry->e.end = end;
+        entry->e.prot = prot;
+        entry->e.flags = 0;
+
+        list_add_tail(&(entry->list), &(vm_map_entries->h));
+        vm_map_entries->nr++;
     }
     fclose(map_file);
-    return map_entry_list;
+
+    return vm_map_entries;
+}
+
+int collect_fds(Image *image, struct s_box *cvm) {
+  // TODO: empty impl here
+  Fdinfo *fdinfo = malloc(sizeof(Fdinfo));
+  fdinfo__init(fdinfo);
+
+  fdinfo->n_fdinfo_entries = 0;
+
+  image->fileinfo = fdinfo;
+
+  return 0;
+}
+
+int collect_map_entries(Image *image, vm_map_entry_list *vm_map_entries) {
+  MmStruct *mm_struct = malloc(sizeof(MmStruct));
+  mm_struct__init(mm_struct);
+
+  mm_struct->vma_entries = malloc(sizeof(VmaEntry)*vm_map_entries->nr);
+
+  uint64_t pgoff=0l;
+  vm_map_entry *entry;
+  list_for_each_entry(entry, &(vm_map_entries->h), list) {
+    VmaEntry *e = &(entry->e);
+    e->pgoff = pgoff;
+
+    size_t region_size = e->end - e->start;
+    pgoff += region_size;
+    mm_struct->vma_entries[mm_struct->n_vma_entries++] = e;
+    mm_struct->size += region_size;
+  }
+
+  vm_map_entry *first_entry = list_first_entry(&(vm_map_entries->h), struct vm_map_entry, list);
+  mm_struct->start = first_entry->e.start;
+
+  image->meminfo = mm_struct;
+  return 0;
+}
+
+int serialize_image(char* snapshot_path, Image *image) {
+  char image_path[128];
+  sprintf(image_path, "%s/image.img", snapshot_path);
+
+  dlog("[debug/dump] fopen(%s, \"wb+\")\n", image_path);
+  FILE *image_file = fopen(image_path, "wb+");
+  if(image_file==NULL) {
+    printf("Snapshot image open error.\n");
+    exit(1);
+  }
+
+  size_t buf_len = image__get_packed_size(image);
+  uint8_t *buf = malloc(buf_len);
+  int res = image__pack(image, buf);
+
+  for(size_t l=0l;l<buf_len;l+=fwrite(buf, sizeof(uint8_t), buf_len, image_file));
+  
+  fclose(image_file);
+  return 0;
+}
+
+void destroy_local_cap_store(int cid) {
+  struct s_box *cvm = &(cvms[cid]);
+  void* local_cap_store = cvm->base+0xe001000;
+  size_t local_cap_store_size = sizeof(void*__capability) * 13;
+  printf("[debug/dump] destroy caps in %p - %p\n", local_cap_store, local_cap_store+local_cap_store_size);
+  printf("[debug/dump] sizeof(void*__capability) = %ld\n", sizeof(void*__capability));
+  printf("[debug/dump] sizeof local_cap_store = %ld\n", local_cap_store_size);
+
+  // do not work, still sicode=103 during copying
+  memset(local_cap_store, 0, local_cap_store_size);
 }
 
 void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
@@ -111,42 +185,51 @@ void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
         : "=r"(cur_sp), "=r"(cur_ra), "=r"(cur_s0));
 
 #ifndef TFORK
+    Image *image = malloc(sizeof(Image));
+    image__init(image);
+
     // get memory layout of template memory region
-    map_entry *map_entry_list = get_map_entry_list(cid);
-    cvm_map_entry_list[cid] = map_entry_list;
+    vm_map_entry_list *vm_map_entries = get_vm_map_entry_list(cid);
 
-    // print_map_entry_list(map_entry_list);
+    collect_map_entries(image, vm_map_entries);
 
-    // save memory memory content
-    int fd = memfd_create(cvms[cid].libos, 0);
-    // change file size according to cmp size
-    unsigned long cmp_begin = cvms[cid].cmp_begin;
-    unsigned long cmp_end = cvms[cid].cmp_end;
-    size_t cmp_size = cmp_end - cmp_begin;
-    // set the memfd size
-    ftruncate(fd, cmp_size);
-    cvm_snapshot_fd[cid] = fd;
+    collect_fds(image, &(cvms[cid]));
 
-    // create mmap shared region
-    void *res = mmap(NULL, cmp_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    assert(res != MAP_FAILED);
+    serialize_image(cvms[cid].snapshot_path, image);
 
-    dlog("cmp_begin = 0x%lx, cmp_end = 0x%lx\n", cmp_begin, cmp_end);
-    dlog("snapshot data memory region: %p - %p\n", res, res + cmp_size);
+    char name_buf[128];
+    sprintf(name_buf, "%s/pages.img", cvms[cid].snapshot_path);
 
-    uint8_t *snapshot_data = res;
-    unsigned long offset = 0;
-    map_entry *p = map_entry_list;
-    while (p != NULL)
-    {
-        size_t size = p->end - p->start;
+    // TODO: delete this
+    destroy_local_cap_store(cid);
 
-        memcpy(snapshot_data + offset, (void*)p->start, size);
-
-        offset += size;
-        p = p->next;
+    // NOTE: save memory memory content of template here
+    // capability should destroied before this
+    FILE *page_file = fopen(name_buf, "wb+");
+    if(page_file==NULL) {
+        printf("[debug/dump] page file open failed.");
+        exit(1);
     }
-    assert(munmap(snapshot_data, cmp_size) == 0);
+    int page_fd = fileno(page_file);
+    size_t page_file_size = image->meminfo->size;
+
+    unsigned long offset = 0;
+
+    vm_map_entry *entry;
+    list_for_each_entry(entry, &(vm_map_entries->h), list) {
+      size_t region_size = entry->e.end - entry->e.start;
+
+      size_t res = fwrite((void*)entry->e.start, sizeof(uint8_t), region_size, page_file);
+      assert(res == region_size);
+
+      dlog("[debug/dump] entry->start = 0x%lx, offset = 0x%lx, writed size: 0x%lx\n", 
+           entry->e.start, offset, res);
+      dlog("[debug/dump] writed size: 0x%lx, expected: 0x%lx\n", res, region_size);
+
+      offset += region_size;
+    }
+
+    fclose(page_file);
 #endif
     // printf("save status = %d\n", status);
     // __asm__ __volatile__("sd sp, %0" :"=m" (cur_sp) :: "memory");
@@ -200,9 +283,24 @@ void restore_main_thread(struct c_thread *target_thread)
     void *comp_ddc = (void*)((uint64_t)local_cap_store) + 2 * sealcap_size;
     void *sealed_pcc = (void*)((uint64_t)local_cap_store) + 11 * sealcap_size;
     void *sealed_ddc = (void*)((uint64_t)local_cap_store) + 12 * sealcap_size;
+    void *sealed_hc_pcc = (void*)((uint64_t)local_cap_store) + 3 * sealcap_size;
+    void *sealed_mon_ddc = (void*)((uint64_t)local_cap_store) + 4 * sealcap_size;
+
     st_cap(sealed_pcc, cheri_seal(ret_comp_pcc, sealcap));
     st_cap(sealed_ddc, cheri_seal(ret_comp_dcap, sealcap));
     st_cap(comp_ddc, datacap_create((void *)cvm->cmp_begin, (void *)cvm->cmp_end));
+
+    if (target_thread->cb_out == NULL) {
+      dlog("callback_out is empty, use default 'monitor'\n");
+      target_thread->cb_out = "monitor";
+    }
+    // ignore sealed_hc_pcc2 here
+    host_syscall_handler_prb(target_thread->cb_out, &target_thread->sbox->box_caps.sealed_hc_pcc,
+                             &target_thread->sbox->box_caps.sealed_mon_ddc,
+                            &target_thread->sbox->box_caps.sealed_hc_pcc2);
+
+    st_cap(sealed_mon_ddc, target_thread->sbox->box_caps.sealed_mon_ddc);
+    st_cap(sealed_hc_pcc, target_thread->sbox->box_caps.sealed_hc_pcc);
 
     dlog("gen_caps_restored: sealed_pcc \n");
     CHERI_CAP_PRINT(*(cap*)sealed_pcc);

@@ -238,8 +238,8 @@ int host_get_my_inner(struct c_thread *ct, long location) {
 //	st_cap(location + 32, ct->sbox->inner->box_caps.dcap);
 
 	st_cap(location, 	  cvms[1].box_caps.sealed_ret_from_mon);
-	st_cap(location + 16, cvms[1].box_caps.sealed_datacap);
-	st_cap(location + 32, cvms[1].box_caps.dcap);
+	st_cap(location + 16, cvms[1].box_caps.sealed_comp_ddc);
+	st_cap(location + 32, cvms[1].box_caps.comp_ddc);
 
 }
 
