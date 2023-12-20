@@ -29,6 +29,8 @@ char *event_type_tostr(enum event_type e) {
     return "workload resume";
   case E2E:
     return "end to end";
+  case META_EXTRACT:
+    return "meta extract";
   case MMAP_RESTORE:
     return "mmap restore";
   case MPROTECT_RESTORE:
