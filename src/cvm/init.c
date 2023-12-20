@@ -147,11 +147,8 @@ int build_cvm(struct cvm *f) {
     if(cvms[cid].fork) {
       fork_cvm(cid, t_cid, &comp, c_argc, (char **)c_argv);
     } else {
-      // TODO: complete true restore logic
-      printf("[debug] using snapshot image resume!\n");
-      printf("[debug] called fork_cvm for current debuging\n");
+      // FIXME: complete true restore logic, resote completely from image
       fork_cvm(cid, t_cid, &comp, c_argc, (char **)c_argv);
-      printf("[debug] ended of fork_cvm\n");
       // restore_cvm_from_image(cid, t_cid, &comp, c_argc, (char**)c_argv, f->snapshot_path);
     }
   }
@@ -575,8 +572,6 @@ void *run_cvm(int cid) {
   void *__capability sealed_datacapt = me->sbox->box_caps.sealed_mon_ddc;
   void *__capability sealed_ret_from_mon =
       me->sbox->box_caps.sealed_ret_from_mon;
-
-  printf("[debug/init] &sealed_codecap = %p\n", (void*)&sealed_codecap);
 
   struct cinv_s cinv_args;
 

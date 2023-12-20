@@ -168,9 +168,7 @@ void destroy_local_cap_store(int cid) {
   struct s_box *cvm = &(cvms[cid]);
   void* local_cap_store = cvm->base+0xe001000;
   size_t local_cap_store_size = sizeof(void*__capability) * 13;
-  printf("[debug/dump] destroy caps in %p - %p\n", local_cap_store, local_cap_store+local_cap_store_size);
-  printf("[debug/dump] sizeof(void*__capability) = %ld\n", sizeof(void*__capability));
-  printf("[debug/dump] sizeof local_cap_store = %ld\n", local_cap_store_size);
+  dlog("[debug/dump] destroy caps in %p - %p\n", local_cap_store, local_cap_store+local_cap_store_size);
 
   // do not work, still sicode=103 during copying
   memset(local_cap_store, 0, local_cap_store_size);
