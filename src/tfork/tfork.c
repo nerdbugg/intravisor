@@ -201,7 +201,7 @@ void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
     // TODO: delete this
     destroy_local_cap_store(cid);
 
-    // NOTE: save memory memory content of template here
+    // NOTE: save memory content of template here
     // capability should destroied before this
     FILE *page_file = fopen(name_buf, "wb+");
     if(page_file==NULL) {
@@ -498,6 +498,8 @@ void notify_other_thread_save(struct c_thread *cur_thread)
         req.sub_threads[i - 1].pthread_id = threads[i].tid;
         req.sub_threads[i - 1].ct = &(threads[i]);
     }
+
+    // NOTE: just return when there is only one thread
     if (i == 1) {
         return;
     }

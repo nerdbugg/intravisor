@@ -1,4 +1,9 @@
 .vscode
+.cache
 compile_commands.json
 config.mak
 .idea
+
+*.d
+*.o
+*.so

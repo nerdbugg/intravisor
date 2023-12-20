@@ -10,6 +10,10 @@
 extern unsigned long __hostcall(unsigned long call_num, unsigned long arg1,
                                 unsigned long arg2, unsigned long arg3);
 
+void generate_snapshot() {
+  __hostcall(SAVE, 0, 0, 0);
+}
+
 static const float input_3[] = {
     0,   0,   0,   0,   0,   0,   0,   0,   0,   1,   3,   0,   0,   4,   2,
     0,   11,  0,   0,   14,  1,   0,   19,  0,   0,   0,   0,   0,   0,   0,
@@ -89,7 +93,7 @@ int main(int argc, char *argv[]) {
   output = onnx_tensor_search(ctx, "Plus214_Output_0");
 
   // snapshot here
-  __hostcall(SAVE, 0, 0, 0);
+  generate_snapshot();
 
   /*
    * Fill some data to input tensor
