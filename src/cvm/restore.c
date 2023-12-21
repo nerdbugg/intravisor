@@ -35,7 +35,7 @@ Image* image_deserialize_from_file(char *path) {
   return image;
 }
 
-void restore_cvm_region_from_snapshot(struct s_box *cvm, char* snapshot_path, struct s_box *t_cvm) {
+void restore_cvm_region_from_snapshot(struct s_box *cvm, char* snapshot_path) {
   dlog("[debug] restore cvm using snapshot path: %s\n", snapshot_path);
   profiler_begin(&(profilers[MMAP_RESTORE]));
 
@@ -66,7 +66,7 @@ void restore_cvm_region_from_snapshot(struct s_box *cvm, char* snapshot_path, st
   for(int i=0;i<mm_struct->n_vma_entries;i++) {
     VmaEntry *vma_entry = mm_struct->vma_entries[i];
 
-    void* map_start = (void*)(vma_entry->start - (unsigned long)t_cvm->cmp_begin + (unsigned long)cvm->cmp_begin);
+    void* map_start = (void*)(vma_entry->start + (unsigned long)cvm->cmp_begin);
     size_t map_size = vma_entry->end - vma_entry->start;
 
     dlog("[debug/restore] mmap(%p, 0x%lx, %d, MAP_PRIVATE|MAP_FIXED, %d, 0x%lx)\n", 
@@ -81,7 +81,7 @@ void restore_cvm_region_from_snapshot(struct s_box *cvm, char* snapshot_path, st
 #else
   VmaEntry *first_entry = mm_struct->vma_entries[0];
 
-  void* map_start = (void*)first_entry->start-t_cvm->cmp_begin+cvm->cmp_begin;
+  void* map_start = (void*)first_entry->start+cvm->cmp_begin;
   size_t map_size = first_entry->end-first_entry->start;
   size_t map_file_off = 0l;
   // iterate from 1, 0 is the last
@@ -89,9 +89,9 @@ void restore_cvm_region_from_snapshot(struct s_box *cvm, char* snapshot_path, st
     VmaEntry *last_entry = mm_struct->vma_entries[i-1];
     VmaEntry *vma_entry = mm_struct->vma_entries[i];
 
-    unsigned long start = vma_entry->start - t_cvm->cmp_begin + cvm->cmp_begin;
+    unsigned long start = vma_entry->start + cvm->cmp_begin;
     size_t cur_entry_size = vma_entry->end - vma_entry->start;
-    
+
     if(vma_entry->start == last_entry->end) {
       map_size += cur_entry_size;
     } else {
@@ -117,7 +117,7 @@ void restore_cvm_region_from_snapshot(struct s_box *cvm, char* snapshot_path, st
   for (int i=0; i<mm_struct->n_vma_entries; i++) {
     VmaEntry *entry = mm_struct->vma_entries[i];
 
-    unsigned long map_start = entry->start-t_cvm->cmp_begin+cvm->cmp_begin;
+    unsigned long map_start = entry->start+cvm->cmp_begin;
     size_t map_size = entry->end - entry->start;
     
     dlog("[debug/restore] mprotect(%p, 0x%lx, %d)\n", (void*)map_start, map_size, entry->prot);
@@ -137,7 +137,7 @@ void restore_cvm_region(struct s_box *cvm, struct s_box *t_cvm) {
   dlog("prepare restore memory layout using template snapshot\n");
   int t_cid = t_cvm->cid;
 
-  restore_cvm_region_from_snapshot(cvm, cvm->snapshot_path, t_cvm);
+  restore_cvm_region_from_snapshot(cvm, cvm->snapshot_path);
 
   dlog("complete snapshot restoration\n");
 #else

@@ -93,8 +93,8 @@ vm_map_entry_list *get_vm_map_entry_list(int cid)
         vm_map_entry *entry = (vm_map_entry*)malloc(sizeof(vm_map_entry));
         vma_entry__init(&(entry->e));
 
-        entry->e.start = start;
-        entry->e.end = end;
+        entry->e.start = start-range_low;
+        entry->e.end = end-range_low;
         entry->e.prot = prot;
         entry->e.flags = 0;
 
@@ -216,12 +216,13 @@ void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
     vm_map_entry *entry;
     list_for_each_entry(entry, &(vm_map_entries->h), list) {
       size_t region_size = entry->e.end - entry->e.start;
+      void* region_start = (void*)entry->e.start + cvms[cid].cmp_begin;
 
-      size_t res = fwrite((void*)entry->e.start, sizeof(uint8_t), region_size, page_file);
+      size_t res = fwrite((void*)region_start, sizeof(uint8_t), region_size, page_file);
       assert(res == region_size);
 
-      dlog("[debug/dump] entry->start = 0x%lx, offset = 0x%lx, writed size: 0x%lx\n", 
-           entry->e.start, offset, res);
+      dlog("[debug/dump] start = %p, offset = 0x%lx, writed size: 0x%lx\n", 
+           region_start, offset, res);
       dlog("[debug/dump] writed size: 0x%lx, expected: 0x%lx\n", res, region_size);
 
       offset += region_size;
