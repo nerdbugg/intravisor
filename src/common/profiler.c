@@ -1,4 +1,5 @@
 #include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -58,8 +59,7 @@ void profiler_end(profiler_t *p) {
   }
 }
 
-// TODO: complete the demo
-void profiler_dump() {
+void profiler_dump(bool full){
   profiler_t *ps = profilers;
 
 #ifdef DEBUG
@@ -71,6 +71,14 @@ void profiler_dump() {
   for (int i = 0; i < MAX_PROFILER_NUM; i++) {
     char buf[32];
     profiler_t *profiler = &(profilers[i]);
+
+    if(full==false) {
+      struct timespec *temp = &(profiler[i].elapsed);
+      if(temp->tv_sec==0&&temp->tv_nsec==0) {
+        continue;
+      }
+    }
+
     timespec_tostr(&(profilers[i].elapsed), buf, 32);
     printf("%-32s %s (raw data: %ld s, %ld ns)\r\n", event_type_tostr(i), buf,
            profiler->elapsed.tv_sec, profiler->elapsed.tv_nsec);

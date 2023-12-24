@@ -33,4 +33,4 @@ extern profiler_t profilers[MAX_PROFILER_NUM];
 
 void profiler_begin(profiler_t *p);
 void profiler_end(profiler_t *p);
-void profiler_dump();
+void profiler_dump(bool full);

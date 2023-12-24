@@ -112,6 +112,7 @@ void create_and_start_cvm(struct cvm *f) {
       dlog("cvm[%ld]-thread[%d] has exited.\n", cvm - cvms, i);
     }
 
+    profiler_dump(false);
     dlog("join returned\n");
   } else
     sleep(f->wait);

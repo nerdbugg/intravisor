@@ -215,14 +215,21 @@ int monitor_main(int argc, char *argv[]) {
 	// wait completion
 	for (int i = 0; i < MAX_CVMS; i++) {
 		struct c_thread *ct = cvms[i].threads;
+
+    if(ct[0].tid==NULL) {
+      continue;
+    }
+
 		void *cret;
 		pthread_join(ct[0].tid, &cret);
 	}
+
   profiler_end(&(profilers[WORKLOAD_EXECUTE]));
   profiler_end(&(profilers[WORKLOAD_RESUME]));
   profiler_end(&(profilers[WORKLOAD_TOTAL]));
   profiler_end(&(profilers[E2E]));
-  profiler_dump();
+  profiler_dump(true);
+
 	printf("all cvm exit, monitor exit.\n");
 	return 0;
 }
