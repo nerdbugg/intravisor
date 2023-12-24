@@ -19,15 +19,17 @@ LIBDIRS		:= -L ../libonnx/src -L $(SYSROOT)/lib -L $(CHERI_SDK)/sysroot-riscv64-
 
 SRCS = main.c duktape.c
 OBJS = main.o duktape.o
-PROGRAMS = main
+PROGRAMS = libduktape-js.so
 
-all: main
+all: libduktape-js.so
 
 main.o: main.c
 
 duktape.o: duktape.c
 
-main: main.o duktape.o
+carrier.o: carrier.c
+
+libduktape-js.so: main.o duktape.o carrier.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LIBDIRS) $^ \
 		$(SYSROOT)/lib/libc.a \
 		$(SYSROOT)/lib/libm.a \

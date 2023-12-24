@@ -255,7 +255,7 @@
 #if defined(DUK_F_BCC)
 /* no endian.h or stdint.h */
 #else
-#include <endian.h>
+#include <machine/endian.h>
 #include <stdint.h>
 #endif  /* DUK_F_BCC */
 #include <sys/param.h>

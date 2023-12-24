@@ -29,4 +29,5 @@ function base64_encode(string) {
 }
 
 var b64 = base64_encode("Hello There");
+print(b64)
 hcall_return(b64);

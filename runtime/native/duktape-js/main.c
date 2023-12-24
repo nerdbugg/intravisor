@@ -3,8 +3,11 @@
 
 #include "duk_config.h"
 #include "duktape.h"
+#include "carrier.h"
 
 static duk_ret_t native_print(duk_context *ctx) {
+  printf("[workload] native_print is called\n");
+
   duk_push_string(ctx, " ");
   duk_insert(ctx, 0);
   duk_join(ctx, duk_get_top(ctx) - 1);
@@ -15,6 +18,7 @@ static duk_ret_t native_print(duk_context *ctx) {
 int get_file_content(char *path, char *buf, int len) {
   FILE *file = fopen(path, "r");
   if (file == NULL) {
+    printf("[workload] open file \"%s\" failed\n", path);
     return -1;
   }
 
@@ -63,13 +67,19 @@ int main(int argc, char *argv[]) {
   duk_put_global_string(ctx, "print");
   eval_string(ctx, "function hcall_return(arg) {/* do nothing */}");
 
-  // init code
-  if(argc<2) {
+  // function specific
+  char arg_buf[128];
+  if(get_arg(arg_buf, 128)!=0) {
     printf("need args\n");
     return 1;
   }
-  int len = get_file_content(argv[1], code, 4*1024);
+  printf("[workload] get arg: \"%s\"\n", arg_buf);
 
+  int len = get_file_content(arg_buf, code, 4*1024);
+  if(len==-1) {
+    printf("[workload] load code failed!\n");
+    return 1;
+  }
   
   eval_code(ctx, code, len);
 
