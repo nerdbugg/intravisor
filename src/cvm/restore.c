@@ -37,7 +37,8 @@ Image* image_deserialize_from_file(char *path) {
 
 void restore_cvm_region_from_snapshot(struct s_box *cvm, char* snapshot_path) {
   dlog("[debug] restore cvm using snapshot path: %s\n", snapshot_path);
-  profiler_begin(&(profilers[MMAP_RESTORE]));
+
+  profiler_begin(&(profilers[META_EXTRACT]));
 
   char name_buf[128];
 
@@ -52,7 +53,6 @@ void restore_cvm_region_from_snapshot(struct s_box *cvm, char* snapshot_path) {
 
   dlog("[debug/restore] opened page file\n");
 
-  profiler_begin(&(profilers[META_EXTRACT]));
   char *image_path = name_buf;
   sprintf(image_path, "%s/image.img", snapshot_path);
   Image* image = image_deserialize_from_file(image_path);
@@ -61,6 +61,7 @@ void restore_cvm_region_from_snapshot(struct s_box *cvm, char* snapshot_path) {
 
   dlog("[debug/restore] Image->meminfo->size = 0x%lx, page_size = 0x%lx\n", 
          mm_struct->size, page_file_size);
+  profiler_begin(&(profilers[MMAP_RESTORE]));
 
 #ifndef MMAP_COMBINE
   for(int i=0;i<mm_struct->n_vma_entries;i++) {
