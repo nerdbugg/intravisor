@@ -56,6 +56,9 @@ void profiler_end(profiler_t *p) {
   time_get(&(p->end));
   if (p->enabled) {
     timespec_diff(&(p->begin), &(p->end), &(p->elapsed));
+    p->enabled = false;
+    p->begin.tv_sec=0;
+    p->begin.tv_nsec=0;
   }
 }
 
@@ -73,8 +76,8 @@ void profiler_dump(bool full){
     profiler_t *profiler = &(profilers[i]);
 
     if(full==false) {
-      struct timespec *temp = &(profiler[i].elapsed);
-      if(temp->tv_sec==0&&temp->tv_nsec==0) {
+      struct timespec *temp = &(profilers[i].elapsed);
+      if(temp->tv_nsec==0&&temp->tv_sec==0) {
         continue;
       }
     }
@@ -142,6 +145,6 @@ int test_profiler(int argc, char *argv[]) {
   }
   profiler_end(e2e);
 
-  profiler_dump();
+  profiler_dump(true);
   return EXIT_SUCCESS;
 }
