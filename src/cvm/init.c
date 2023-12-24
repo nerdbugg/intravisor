@@ -372,6 +372,7 @@ void *run_cvm(int cid) {
   char env4[128];
   char env5[128];
 
+  // NOTE: used in lkl mode
   snprintf(argv1, 128, "/ld.so");
   snprintf(lc1, 128, "LC_ALL=C.UTF-8");
 
@@ -403,7 +404,8 @@ void *run_cvm(int cid) {
   // envs
   sp[0] = me->argc;
 #ifdef HYB_CVM
-  sp[1] = (unsigned long)(mon_to_comp(argv1, me->sbox));
+  // NOTE: no initializing argv here, get arg by hostcall
+  sp[1] = (unsigned long)(mon_to_comp((unsigned long)argv1, me->sbox));
 #else
   sp[1] = 0xaa;
   sp[2] = (unsigned long)(mon_to_comp(argv1, me->sbox));

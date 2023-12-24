@@ -1,9 +1,12 @@
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <netdb.h>
 #include <assert.h>
+#include <string.h>
 #include <sys/socket.h>
 
+#include "common/log.h"
 #include "monitor.h"
 #include "tfork.h"
 #include "common/profiler.h"
@@ -413,6 +416,28 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
       printf("save this cvm, cid=%d\n", sboxptr_to_cid(ct->sbox));
       save_cur_thread_and_exit(sboxptr_to_cid(ct->sbox), ct);
 			break;
+    case 116: {
+      char* buf = (char*)comp_to_mon(a0, ct->sbox);
+      size_t len = a1;
+      char** argv = ct->argv;
+      char* arg = argv[0];
+      size_t argc = ct->argc;
+      size_t arg_size = strlen(arg);
+      if(arg==NULL) {
+        printf("[intravisor/hostcall] no argv set in c_thread\n");
+        ret = 1;
+      }
+      if(arg_size+1>len) {
+        printf("[intravisor/hostcall] arg size larger than buf\n");
+        ret = 1;
+      }
+
+      dlog("[intravisor/hostcall] ct->argv = %s\n", arg);
+
+      strncpy(buf, arg, len);
+      ret = 0;
+      break;
+    }
 #endif
 ////
 //HOST CALLS
