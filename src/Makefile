@@ -36,9 +36,12 @@ else
 	CFLAGS += -O2 -fno-omit-frame-pointer
 endif
 
-#TODO: add mmap_combine
 ifdef MMAP_COMBINE
 	CFLAGS += -DMMAP_COMBINE
+endif
+
+ifdef META_CACHE
+	CFLAGS += -DMETA_CACHE
 endif
 
 ifdef HC_TRACE

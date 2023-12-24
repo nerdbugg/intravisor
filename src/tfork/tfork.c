@@ -31,6 +31,7 @@ const unsigned long TFORK_FAILED = (unsigned long)MAP_FAILED;
 const static int tfork_syscall_num = 577;
 
 int cvm_snapshot_fd[MAX_CVMS];
+Image* cvm_snapshot_meta[MAX_CVMS];
 
 
 typedef void* __capability cap;
@@ -194,6 +195,10 @@ void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
     collect_fds(image, &(cvms[cid]));
 
     serialize_image(cvms[cid].snapshot_path, image);
+
+#ifdef META_CACHE
+    cvm_snapshot_meta[cid] = image;
+#endif
 
     char name_buf[128];
     sprintf(name_buf, "%s/pages.img", cvms[cid].snapshot_path);

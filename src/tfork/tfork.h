@@ -31,6 +31,7 @@ typedef struct vm_map_entry_list vm_map_entry_list;
 
 extern struct cvm_tmplt_ctx cvm_ctx[MAX_CVMS];
 extern int cvm_snapshot_fd[MAX_CVMS];
+extern Image* cvm_snapshot_meta[MAX_CVMS];
 
 void restore_from_template(int cid);
 void notify_other_thread_save(struct c_thread *cur_thread);

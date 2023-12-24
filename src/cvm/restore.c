@@ -38,8 +38,6 @@ Image* image_deserialize_from_file(char *path) {
 void restore_cvm_region_from_snapshot(struct s_box *cvm, char* snapshot_path) {
   dlog("[debug] restore cvm using snapshot path: %s\n", snapshot_path);
 
-  profiler_begin(&(profilers[META_EXTRACT]));
-
   char name_buf[128];
 
   char *page_path = name_buf;
@@ -53,11 +51,18 @@ void restore_cvm_region_from_snapshot(struct s_box *cvm, char* snapshot_path) {
 
   dlog("[debug/restore] opened page file\n");
 
+#ifdef META_CACHE
+  Image* image = cvm_snapshot_meta[cvm->t_cid];
+  MmStruct *mm_struct = image->meminfo;
+#else
+  profiler_begin(&(profilers[META_EXTRACT]));
+
   char *image_path = name_buf;
   sprintf(image_path, "%s/image.img", snapshot_path);
   Image* image = image_deserialize_from_file(image_path);
   MmStruct *mm_struct = image->meminfo;
   profiler_end(&(profilers[META_EXTRACT]));
+#endif
 
   dlog("[debug/restore] Image->meminfo->size = 0x%lx, page_size = 0x%lx\n", 
          mm_struct->size, page_file_size);
