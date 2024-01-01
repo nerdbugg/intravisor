@@ -23,14 +23,15 @@ enum event_type {
   META_EXTRACT,
   MMAP_RESTORE,
   MPROTECT_RESTORE,
+  TFORK_RESTORE,
   E2E,
   MAX_PROFILER_NUM
 };
 
-extern profiler_t profilers[MAX_PROFILER_NUM];
+extern profiler_t global_profilers[MAX_PROFILER_NUM];
 
 
 
 void profiler_begin(profiler_t *p);
 void profiler_end(profiler_t *p);
-void profiler_dump(bool full);
+void profiler_dump(profiler_t* profilers, char* name, bool full);

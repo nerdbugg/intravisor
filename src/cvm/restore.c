@@ -55,18 +55,18 @@ void restore_cvm_region_from_snapshot(struct s_box *cvm, char* snapshot_path) {
   Image* image = cvm_snapshot_meta[cvm->t_cid];
   MmStruct *mm_struct = image->meminfo;
 #else
-  profiler_begin(&(profilers[META_EXTRACT]));
+  profiler_begin(&(cvm->local_profilers[META_EXTRACT]));
 
   char *image_path = name_buf;
   sprintf(image_path, "%s/image.img", snapshot_path);
   Image* image = image_deserialize_from_file(image_path);
   MmStruct *mm_struct = image->meminfo;
-  profiler_end(&(profilers[META_EXTRACT]));
+  profiler_end(&(cvm->local_profilers[META_EXTRACT]));
 #endif
 
   dlog("[debug/restore] Image->meminfo->size = 0x%lx, page_size = 0x%lx\n", 
          mm_struct->size, page_file_size);
-  profiler_begin(&(profilers[MMAP_RESTORE]));
+  profiler_begin(&(cvm->local_profilers[MMAP_RESTORE]));
 
 #ifndef MMAP_COMBINE
   for(int i=0;i<mm_struct->n_vma_entries;i++) {
@@ -83,7 +83,7 @@ void restore_cvm_region_from_snapshot(struct s_box *cvm, char* snapshot_path) {
       exit(1);
     }
   }
-  profiler_end(&(profilers[MMAP_RESTORE]));
+  profiler_end(&(cvm->local_profilers[MMAP_RESTORE]));
 #else
   VmaEntry *first_entry = mm_struct->vma_entries[0];
 
@@ -117,9 +117,9 @@ void restore_cvm_region_from_snapshot(struct s_box *cvm, char* snapshot_path) {
   void* res = mmap(map_start, map_size, PROT_READ|PROT_WRITE, 
                     MAP_PRIVATE|MAP_FIXED, page_fd, map_file_off);
   assert(res!=MAP_FAILED);
-  profiler_end(&(profilers[MMAP_RESTORE]));
+  profiler_end(&(cvm->local_profilers[MMAP_RESTORE]));
 
-  profiler_begin(&(profilers[MPROTECT_RESTORE]));
+  profiler_begin(&(cvm->local_profilers[MPROTECT_RESTORE]));
   for (int i=0; i<mm_struct->n_vma_entries; i++) {
     VmaEntry *entry = mm_struct->vma_entries[i];
 
@@ -134,7 +134,7 @@ void restore_cvm_region_from_snapshot(struct s_box *cvm, char* snapshot_path) {
     }
     // assert(ret != -1);
   }
-  profiler_end(&(profilers[MPROTECT_RESTORE]));
+  profiler_end(&(cvm->local_profilers[MPROTECT_RESTORE]));
 #endif /* ifndef MACRO */
 }
 
@@ -149,10 +149,12 @@ void restore_cvm_region(struct s_box *cvm, struct s_box *t_cvm) {
 #else
   dlog("prepare to invoke tfork syscall, src_addr=%p, dst_addr=%p, len=%lu\n",
        (void *)t_cvm->cmp_begin, (void *)cvm->cmp_begin, cvm->box_size);
+  profiler_begin(&(cvm->local_profilers[TFORK_RESTORE]));
   if (tfork((void*)t_cvm->cmp_begin, (void*)cvm->cmp_begin, cvm->box_size) == TFORK_FAILED) {
     printf("tfork FAILED\n");
     exit(1);
   }
+  profiler_end(&(cvm->local_profilers[TFORK_RESTORE]));
   dlog("tfork complete\n");
 #endif
 }

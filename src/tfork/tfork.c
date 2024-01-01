@@ -244,7 +244,7 @@ void save_cur_thread_and_exit(int cid, struct c_thread *cur_thread)
     // cur_thread->ctx.ra = cur_ra;
     cur_thread->ctx.s0 = cur_s0;
 
-    profiler_end(&(profilers[SNAPSHOT_GEN]));
+    profiler_end(&(cvms[cid].local_profilers[SNAPSHOT_GEN]));
 
     destroy_carrie_thread(cur_thread->sbox->threads);
 }
@@ -313,8 +313,8 @@ void restore_main_thread(struct c_thread *target_thread)
     dlog("gen_caps_restored: comp_ddc \n");
     CHERI_CAP_PRINT(*(cap*)comp_ddc);
 
-    profiler_end(&(profilers[SANDBOX_RESUME]));
-    profiler_begin(&(profilers[WORKLOAD_RESUME]));
+    profiler_end(&(cvm->local_profilers[SANDBOX_RESUME]));
+    profiler_begin(&(cvm->local_profilers[WORKLOAD_RESUME]));
 
     // TODO: get a reliable source of prev sp register
     void *prev_s0 = (void *)(*(uint64_t *)(ctx->s0 - 16) + 112);

@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/thr.h>
 
 #include "common/log.h"
@@ -61,6 +62,10 @@ struct s_box *build_from_config(struct cvm *f) {
   cvm->resume = (cvm->t_cid > 0) && cvm->resume;
 
   cvm->snapshot_path = f->snapshot_path;
+
+  size_t size = sizeof(profiler_t)*MAX_PROFILER_NUM;
+  cvm->local_profilers = malloc(size);
+  memset(cvm->local_profilers, 0, size);
   return cvm;
 }
 
@@ -70,8 +75,10 @@ void create_and_start_cvm(struct cvm *f) {
   int ret;
 
   if (cvm->resume == false) {
+    profiler_begin(&(cvm->local_profilers[SANDBOX_INIT]));
     init_pthread_stack(cvm);
   } else {
+    profiler_begin(&(cvm->local_profilers[SANDBOX_RESUME]));
     restore_cvm_region(cvm, &(cvms[cvm->t_cid]));
   }
 
@@ -112,7 +119,8 @@ void create_and_start_cvm(struct cvm *f) {
       dlog("cvm[%ld]-thread[%d] has exited.\n", cvm - cvms, i);
     }
 
-    profiler_dump(false);
+    profiler_end(&(cvm->local_profilers[WORKLOAD_RESUME]));
+    profiler_dump(cvm->local_profilers, "cvm local metrics", false);
     dlog("join returned\n");
   } else
     sleep(f->wait);
@@ -680,10 +688,10 @@ void *run_cvm(int cid) {
   tp_args[0] = me->sbox->top - me->sbox->stack_size + 0x1000;
   tp_args[1] = me->sbox->cid;
 
-  profiler_end(&(profilers[SANDBOX_INIT]));
+  profiler_end(&(me->sbox->local_profilers[SANDBOX_INIT]));
 
-  profiler_begin(&(profilers[WORKLOAD_TOTAL]));
-  profiler_begin(&(profilers[WORKLOAD_PREPARE]));
+  profiler_begin(&(me->sbox->local_profilers[WORKLOAD_TOTAL]));
+  profiler_begin(&(me->sbox->local_profilers[WORKLOAD_PREPARE]));
 
   uint64_t args_addr = &(cinv_args);
 

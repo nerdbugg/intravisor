@@ -8,7 +8,7 @@
 
 #include "profiler.h"
 
-profiler_t profilers[MAX_PROFILER_NUM];
+profiler_t global_profilers[MAX_PROFILER_NUM];
 
 char *event_type_tostr(enum event_type e) {
   switch (e) {
@@ -36,6 +36,8 @@ char *event_type_tostr(enum event_type e) {
     return "mmap restore";
   case MPROTECT_RESTORE:
     return "mprotect restore";
+  case TFORK_RESTORE:
+    return "tfork restore";
   default:
     return "undefined event";
   }
@@ -49,6 +51,10 @@ void time_get(struct timespec *tp) { clock_gettime(CLOCK_REALTIME, tp); }
 
 void profiler_begin(profiler_t *p) {
   time_get(&(p->begin));
+  if(p->enabled) {
+    printf("conflict!\n");
+    printf("profiler name: %s\n", event_type_tostr(p-global_profilers));
+  }
   p->enabled = true;
 }
 
@@ -62,7 +68,7 @@ void profiler_end(profiler_t *p) {
   }
 }
 
-void profiler_dump(bool full){
+void profiler_dump(profiler_t* profilers, char* name, bool full){
   profiler_t *ps = profilers;
 
 #ifdef DEBUG
@@ -70,6 +76,7 @@ void profiler_dump(bool full){
 #endif
 
   printf("------------------------------------\r\n");
+  printf("Profiler name: %s\n", name);
   printf("Profiler analysis:\r\n");
   for (int i = 0; i < MAX_PROFILER_NUM; i++) {
     char buf[32];
@@ -133,18 +140,18 @@ int timespec_diff(struct timespec *ts1, struct timespec *ts2,
 }
 
 int test_profiler(int argc, char *argv[]) {
-  profiler_t *start = &(profilers[SANDBOX_INIT]);
+  profiler_t *start = &(global_profilers[SANDBOX_INIT]);
   profiler_begin(start);
   for (int i = 0; i < 10000; i++) {
   }
   profiler_end(start);
 
-  profiler_t *e2e = &(profilers[E2E]);
+  profiler_t *e2e = &(global_profilers[E2E]);
   profiler_begin(e2e);
   for (int i = 0; i < 1000; i++) {
   }
   profiler_end(e2e);
 
-  profiler_dump(true);
+  profiler_dump(global_profilers, "test", true);
   return EXIT_SUCCESS;
 }

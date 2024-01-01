@@ -258,7 +258,8 @@ struct s_box {
 	cpuset_t cpuset;
 #endif
 	struct box_caps_s box_caps;
-
+// profiler array
+  struct profiler_t *local_profilers;
 // compartment borders, they might be not the same as borders above
 	unsigned long cmp_begin;
 	unsigned long cmp_end;

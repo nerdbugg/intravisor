@@ -397,14 +397,14 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 //SAVE
 /// 
 		case 115:
-      profiler_end(&(profilers[WORKLOAD_PREPARE]));
+      profiler_end(&(ct->sbox->local_profilers[WORKLOAD_PREPARE]));
 
-      profiler_begin(&(profilers[SNAPSHOT_GEN]));
+      profiler_begin(&(ct->sbox->local_profilers[SNAPSHOT_GEN]));
 
 			// save hostcall no effect when configured is_template false
 			if (!ct->sbox->is_template) {
         // NOTE: test in single cvm case
-        profiler_begin(&(profilers[WORKLOAD_EXECUTE]));
+        profiler_begin(&(ct->sbox->local_profilers[WORKLOAD_EXECUTE]));
 				break;
       }
 
