@@ -157,17 +157,18 @@ int cvm_write(s_box *cvm, int fd, const char *buf, size_t len) {
 
   int sysfd = file->sharedfd->sysfd;
 
-  // skip stdio
-  if (sysfd > 2) {
-    // set offset
-    lseek(sysfd, file->f_offset, SEEK_SET);
+  int res;
+  if(sysfd > 2) { /* skip stdio */
+    // write from setted offset
+    res = pwrite(sysfd, buf, len, file->f_offset);
+  } else {
+    res = write(sysfd, buf, len);
   }
 
-  // NOTE: the return value does not contain errno?
-  int res = write(sysfd, buf, len);
-  // dlog("[intravisor/fs] write syscall returned %d, errno is %d\n", res,
-  // errno);
+  // dlog("[intravisor/fs] write syscall returned %d, errno is %d\n", res, errno);
+
   if(res>0) {
+    // update offset
     file->f_offset += res;
   }
 
@@ -194,10 +195,15 @@ int cvm_read(s_box *cvm, int fd, char *buf, size_t len) {
 
   int sysfd = file->sharedfd->sysfd;
 
-  // set offset
-  lseek(sysfd, file->f_offset, SEEK_SET);
+  int res;
+  if(sysfd > 2) { /* skip stdio */
+    // read from offset
+    res = pread(sysfd, buf, len, file->f_offset);
+  } else {
+    res = read(sysfd, buf, len);
+  }
 
-  int res = read(sysfd, buf, len);
+  // dlog("[intravisor/fs] read syscall returned %d, errno is %d\n", res, errno);
 
   if(res>0) {
     file->f_offset += res;
