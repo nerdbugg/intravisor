@@ -626,7 +626,8 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 			ret = lstat((char*)comp_to_mon(a0, ct->sbox), (struct stat*)comp_to_mon(a1, ct->sbox));
 			break;
 		case 806:
-			ret = stat((char*)comp_to_mon(a0, ct->sbox), (struct stat*)comp_to_mon(a1, ct->sbox));
+      ret = cvm_stat(ct->sbox, (const char*)comp_to_mon(a0, ct->sbox), 
+                     (struct carrier_stat*)comp_to_mon(a1, ct->sbox));
 			break;
 		case 807:
 			ret = fstat(a0, (struct stat*)comp_to_mon(a1, ct->sbox));

@@ -165,18 +165,18 @@ int cvm_write(s_box *cvm, int fd, const char *buf, size_t len) {
     res = write(sysfd, buf, len);
   }
 
-  // dlog("[intravisor/fs] write syscall returned %d, errno is %d\n", res, errno);
-
-  if(res>0) {
-    // update offset
-    file->f_offset += res;
+  if(sysfd > 2) { /* skip stdio */
+    dlog("[intravisor/fs] write syscall returned %d, errno is %d\n", res, errno);
   }
 
-  if (errno) {
+  // fail path
+  if(res<0) {
     return -errno;
-  } else {
-    return res;
   }
+
+  // update offset
+  file->f_offset += res;
+  return res;
 }
 
 int cvm_read(s_box *cvm, int fd, char *buf, size_t len) {
@@ -203,17 +203,18 @@ int cvm_read(s_box *cvm, int fd, char *buf, size_t len) {
     res = read(sysfd, buf, len);
   }
 
-  // dlog("[intravisor/fs] read syscall returned %d, errno is %d\n", res, errno);
-
-  if(res>0) {
-    file->f_offset += res;
+  if(sysfd > 2) { /* skip stdio */
+    dlog("[intravisor/fs] read syscall returned %d, errno is %d\n", res, errno);
   }
 
-  if (errno) {
+  // fail path
+  if(res<0) {
     return -errno;
-  } else {
-    return res;
   }
+
+  // update offset
+  file->f_offset += res;
+  return res;
 }
 
 int cvm_lseek(s_box *cvm, int fd, off_t offset, int whence) {
@@ -271,6 +272,32 @@ int cvm_close(s_box *cvm, int fd) {
   }
 
   return 0;
+}
+
+static void conv_stat(struct carrier_stat *cst, struct stat *st) {
+  cst->st_dev = st->st_dev;
+  cst->st_ino = st->st_ino;
+  cst->st_mode = st->st_mode;
+  cst->st_nlink = st->st_nlink;
+  cst->st_uid = st->st_uid;
+  cst->st_gid = st->st_gid;
+  cst->st_rdev = st->st_rdev;
+  cst->st_size = st->st_size;
+  cst->st_atim.tv_sec = st->st_atim.tv_sec;
+  cst->st_ctim.tv_sec = st->st_ctim.tv_sec;
+  cst->st_mtim.tv_sec = st->st_mtim.tv_sec;
+  cst->st_blksize = st->st_blksize;
+  cst->st_blocks = st->st_blocks;
+}
+
+int cvm_stat(s_box *cvm, const char *restrict pathname,
+             struct carrier_stat *restrict carrier_stat) {
+  struct stat statbuf;
+
+  int res = stat(pathname, &statbuf);
+  conv_stat(carrier_stat, &statbuf);
+
+  return res;
 }
 
 int cvm_dup(s_box *cvm, int fd) {
