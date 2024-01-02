@@ -33577,7 +33577,7 @@ DUK_INTERNAL duk_double_t duk_bi_date_get_now_gettimeofday(void) {
 	duk_double_t d;
 
   // NOTE: workaround for newlib symbol
-	if (_gettimeofday(&tv, NULL) != 0) {
+	if (gettimeofday(&tv, NULL) != 0) {
 		DUK_D(DUK_DPRINT("gettimeofday() failed"));
 		return 0.0;
 	}
