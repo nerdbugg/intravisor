@@ -1,7 +1,6 @@
 #include "monitor.h"
 #include <sys/thr.h>
 #include <assert.h>
-#include "common/profiler.h"
 
 // asm.S
 extern void cinv2(long, void *__capability, void *__capability, void *__capability);
@@ -89,12 +88,6 @@ void destroy_carrie_thread(struct c_thread *ct) {
 				printf("EXIT ON < 0.95X\n");
 				exit(0);
 			}
-
-      // TODO: if thread is main and exit because of snapshot
-      if(i==0) {
-        profiler_dump(ct->sbox->local_profilers, "local", false);
-      }
-
 			pthread_exit(NULL);
 #endif
 			// todo: is below code reachable?
