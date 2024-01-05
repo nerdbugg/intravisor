@@ -403,7 +403,11 @@ printf("EXEC FREE %p, who called?\n", a0); while(1);
 
 			// save hostcall no effect when configured is_template false
 			if (!ct->sbox->is_template) {
-        // NOTE: test in single cvm case
+        /* write 0 flag to notify daemon no req need to be handled */
+        int flag = 0;
+        extern int send_req, receive_resp;
+        write(send_req, &flag, sizeof(flag));
+
         profiler_begin(&(ct->sbox->local_profilers[WORKLOAD_EXECUTE]));
 				break;
       }

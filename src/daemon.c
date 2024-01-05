@@ -20,7 +20,7 @@ int monitor_pid;
 // hostcall.c
 extern void destroy_carrie_thread(struct c_thread *ct);
 
-int handler(snapshot_req_t *req, snapshot_resp_t *resp)
+int generate_resp(snapshot_req_t *req, snapshot_resp_t *resp)
 {
     int ret, i, val;
     pthread_t tid;
@@ -91,11 +91,20 @@ int daemon_main(int child_pid, int req_pipe, int resp_pipe)
     {
         memset(&req, 0, sizeof(req));
         memset(&resp, 0, sizeof(resp));
-        read(req_pipe, &req, sizeof(req));
-        dlog("daemon: receive snapshot request, size=%d! main_thread_id=%d, req.sub_thread_ids[0]=%d, host_exit_addr=%p\n", sizeof(req), req.main_thread_id, req.sub_threads[0].task_id, req.host_exit_addr);
-        handler(&req, &resp);
-        dlog("daemon: ready to send snapshot response! fd=%d\n", resp_pipe);
-        write(resp_pipe, &resp, sizeof(resp));
+
+        int flag=0;
+        read(req_pipe, &flag, sizeof(flag));
+
+        /* multi-thread snapshot, need handle requests */
+        if(flag!=0) {
+            read(req_pipe, &req, sizeof(req));
+            dlog("daemon: receive snapshot request, size=%d! main_thread_id=%d, req.sub_thread_ids[0]=%d, host_exit_addr=%p\n", sizeof(req), req.main_thread_id, req.sub_threads[0].task_id, req.host_exit_addr);
+
+            generate_resp(&req, &resp);
+            dlog("daemon: ready to send snapshot response! fd=%d\n", resp_pipe);
+
+            write(resp_pipe, &resp, sizeof(resp));
+        }
 
         waitid(P_PID, monitor_pid, &info, WSTOPPED | WEXITED);
         dlog("daemon: monitor crash! receive wait val\n");

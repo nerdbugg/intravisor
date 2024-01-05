@@ -506,9 +506,16 @@ void notify_other_thread_save(struct c_thread *cur_thread)
     }
 
     // NOTE: just return when there is only one thread
+    int flag=0;
     if (i == 1) {
+        /* write 0 flag to notify daemon no req need to be handled */
+        write(send_req, &flag, sizeof(flag));
         return;
     }
+
+    flag = 1;
+    /* write 1 flag to notify daemon remain reqs need to be handled */
+    write(send_req, &flag, sizeof(flag));
 
     dlog("monitor: ready to send snapshot req. fd=%d\n", send_req);
     write(send_req, &req, sizeof(req));
