@@ -75,8 +75,8 @@ void profiler_dump(profiler_t* profilers, char* name, bool full){
   printf("[warning] executable is compiled under DEBUG mode!!!\n");
 #endif
 
-  printf("------------------------------------\r\n");
-  printf("Profiler name: %s\n", name);
+  printf(">>>>>--------------------\r\n");
+  printf("Profiler name: <%s>\n", name);
   printf("Profiler analysis:\r\n");
   for (int i = 0; i < MAX_PROFILER_NUM; i++) {
     char buf[32];
@@ -93,7 +93,7 @@ void profiler_dump(profiler_t* profilers, char* name, bool full){
     printf("%-32s %s (raw data: %ld s, %ld ns)\r\n", event_type_tostr(i), buf,
            profiler->elapsed.tv_sec, profiler->elapsed.tv_nsec);
   }
-  printf("------------------------------------\r\n");
+  printf("<<<<<--------------------\r\n");
 }
 
 void timespec_tostr(struct timespec *ts, char buf[], size_t len) {
