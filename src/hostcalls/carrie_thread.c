@@ -84,10 +84,10 @@ void destroy_carrie_thread(struct c_thread *ct) {
 #ifdef LKL
 			lkl_host_ops.thread_exit();
 #else
-			if(ct->sbox->cid > 2) {
-				printf("EXIT ON < 0.95X\n");
-				exit(0);
-			}
+			// if(ct->sbox->cid > 2) {
+			// 	printf("EXIT ON < 0.95X\n");
+			// 	exit(0);
+			// }
 			pthread_exit(NULL);
 #endif
 			// todo: is below code reachable?
