@@ -216,12 +216,18 @@ int monitor_main(int argc, char *argv[]) {
 		pthread_join(ct[0].tid, &cret);
 	}
 
-  profiler_end(&(global_profilers[WORKLOAD_EXECUTE]));
+  // profiler_end(&(global_profilers[WORKLOAD_EXECUTE]));
   profiler_end(&(global_profilers[WORKLOAD_TOTAL]));
   profiler_end(&(global_profilers[E2E]));
   profiler_dump(global_profilers, "global", false);
 
+#ifdef MEM_METRIC
+	printf("all cvm exit, time to measure mem usage.\n");
+  while (1) {}
+#else
 	printf("all cvm exit, monitor exit.\n");
+#endif
+
 	return 0;
 }
 

@@ -36,6 +36,10 @@ else
 	CFLAGS += -O2 -fno-omit-frame-pointer
 endif
 
+ifdef MEM_METRIC
+	CFLAGS += -DMEM_METRIC
+endif
+
 ifdef MMAP_COMBINE
 	CFLAGS += -DMMAP_COMBINE
 endif
