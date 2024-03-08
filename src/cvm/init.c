@@ -75,10 +75,14 @@ void create_and_start_cvm(struct cvm *f) {
   int ret;
 
   if (cvm->resume == false) {
+    printf("[indicate] no resume\n");
     profiler_begin(&(cvm->local_profilers[SANDBOX_INIT]));
+
     init_pthread_stack(cvm);
   } else {
+    printf("[indicate] resume\n");
     profiler_begin(&(cvm->local_profilers[SANDBOX_RESUME]));
+
     restore_cvm_region(cvm, &(cvms[cvm->t_cid]));
   }
 
@@ -119,7 +123,11 @@ void create_and_start_cvm(struct cvm *f) {
       dlog("cvm[%ld]-thread[%d] has exited.\n", cvm - cvms, i);
     }
 
-    profiler_end(&(cvm->local_profilers[WORKLOAD_RESUME]));
+    if (cvm->resume) {
+      profiler_end(&(cvm->local_profilers[WORKLOAD_RESUME]));
+    } else {
+      profiler_end(&(cvm->local_profilers[WORKLOAD_EXECUTE]));
+    }
     profiler_dump(cvm->local_profilers, "cvm local metrics", false);
     dlog("join returned\n");
   } else
